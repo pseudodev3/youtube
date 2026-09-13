@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import shutil
 import subprocess
 from pathlib import Path
 
+from audio import synthesize_audio
 from race_engine import RaceEngine
 from renderer import W, H, render_frame
 
@@ -38,7 +38,10 @@ def render_video(state):
     skill = float(state["driver_skill"])
     seed = episode * 10007 + int(skill * 1000)
     engine = RaceEngine(skill=skill, seed=seed, duration=DURATION, fps=FPS)
+
     target = OUT / f"episode_{episode:03d}.mp4"
+    video_only = OUT / f"episode_{episode:03d}.video.mp4"
+    audio_path = OUT / f"episode_{episode:03d}.wav"
 
     cmd = [
         "ffmpeg", "-y",
@@ -54,24 +57,50 @@ def render_video(state):
         "-crf", "17",
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
-        str(target),
+        str(video_only),
     ]
 
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     total = int(DURATION * FPS)
     crashed = False
+    speeds: list[float] = []
+    crash_flags: list[bool] = []
+
     try:
         for i in range(total):
             rf = engine.frame(i)
             crashed = crashed or rf.player.crashed
+            speeds.append(float(rf.player.speed))
+            crash_flags.append(bool(rf.player.crashed))
             frame = render_frame(rf, episode=episode, skill=skill, frame_no=i)
             proc.stdin.write(frame.tobytes())
     finally:
         if proc.stdin:
             proc.stdin.close()
         code = proc.wait()
+
     if code != 0:
-        raise RuntimeError(f"ffmpeg failed with exit code {code}")
+        raise RuntimeError(f"ffmpeg video render failed with exit code {code}")
+
+    # Build engine / wind / impact audio directly from the same race telemetry.
+    synthesize_audio(audio_path, speeds, crash_flags, FPS)
+
+    mux = [
+        "ffmpeg", "-y",
+        "-i", str(video_only),
+        "-i", str(audio_path),
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-b:a", "160k",
+        "-shortest",
+        "-movflags", "+faststart",
+        str(target),
+    ]
+    subprocess.run(mux, check=True)
+
+    # Keep artifacts tidy; only the final MP4 and metadata need to survive.
+    video_only.unlink(missing_ok=True)
+    audio_path.unlink(missing_ok=True)
 
     return target, crashed
 
