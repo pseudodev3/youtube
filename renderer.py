@@ -22,38 +22,143 @@ def _font(size: int, bold: bool = False):
 
 
 def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading: float, player: bool = False):
-    # stylized top/rear hybrid car silhouette with separate shadow/highlights
-    sw = 122 * scale
-    sh = 205 * scale
-    shadow = [cx - sw * .58, cy - sh * .45, cx + sw * .58, cy + sh * .48]
-    draw.ellipse(shadow, fill=(0, 0, 0, 78))
+    """Polished arcade Formula-style car rendered procedurally."""
+    sw = 132 * scale
+    sh = 218 * scale
+    dx = max(-0.30, min(0.30, heading)) * 115 * scale
 
-    body = (238, 58, 48, 255) if player else (44, 116, 225, 255)
-    dark = (110, 24, 22, 255) if player else (18, 48, 102, 255)
-    light = (255, 211, 106, 255) if player else (121, 205, 255, 255)
+    if player:
+        body = (236, 54, 50, 255)
+        body_light = (255, 96, 78, 255)
+        body_dark = (124, 25, 29, 255)
+        accent = (255, 211, 86, 255)
+        cockpit = (18, 24, 32, 255)
+    else:
+        body = (44, 117, 226, 255)
+        body_light = (91, 164, 255, 255)
+        body_dark = (18, 51, 111, 255)
+        accent = (148, 213, 255, 255)
+        cockpit = (13, 25, 46, 255)
 
-    # fake heading visually by shifting nose
-    dx = heading * 150 * scale
-    pts = [
-        (cx - sw*.50, cy + sh*.42),
-        (cx - sw*.62, cy + sh*.12),
-        (cx - sw*.43 + dx*.25, cy - sh*.28),
-        (cx + dx, cy - sh*.50),
-        (cx + sw*.43 + dx*.25, cy - sh*.28),
-        (cx + sw*.62, cy + sh*.12),
-        (cx + sw*.50, cy + sh*.42),
+    wheel = (18, 20, 24, 255)
+    carbon = (28, 29, 33, 255)
+
+    # Ground shadow: narrower and lower so the car feels planted instead of floating.
+    draw.ellipse(
+        [cx - sw * .50, cy - sh * .10, cx + sw * .50, cy + sh * .49],
+        fill=(0, 0, 0, 62),
+    )
+
+    # Exposed tyres - front pair smaller, rear pair chunkier.
+    fw, fh = sw * .15, sh * .16
+    rw, rh = sw * .18, sh * .19
+    for side in (-1, 1):
+        sx = cx + side * sw * .43
+        draw.rounded_rectangle(
+            [sx-fw/2, cy-sh*.24, sx+fw/2, cy-sh*.24+fh],
+            radius=max(2, int(7*scale)), fill=wheel,
+        )
+        draw.rounded_rectangle(
+            [sx-rw/2, cy+sh*.14, sx+rw/2, cy+sh*.14+rh],
+            radius=max(2, int(8*scale)), fill=wheel,
+        )
+
+    # Front wing.
+    wing_y = cy - sh * .42
+    draw.rounded_rectangle(
+        [cx-sw*.43+dx*.18, wing_y, cx+sw*.43+dx*.18, wing_y+sh*.055],
+        radius=max(2, int(7*scale)), fill=carbon,
+    )
+    draw.rectangle(
+        [cx-sw*.47+dx*.18, wing_y+sh*.01, cx-sw*.39+dx*.18, wing_y+sh*.075],
+        fill=body_dark,
+    )
+    draw.rectangle(
+        [cx+sw*.39+dx*.18, wing_y+sh*.01, cx+sw*.47+dx*.18, wing_y+sh*.075],
+        fill=body_dark,
+    )
+
+    # Main open-wheel body: narrow nose, broad sidepods, tapered rear.
+    shell = [
+        (cx + dx, cy - sh*.48),
+        (cx + sw*.095 + dx*.70, cy - sh*.32),
+        (cx + sw*.17 + dx*.42, cy - sh*.13),
+        (cx + sw*.31 + dx*.20, cy + sh*.02),
+        (cx + sw*.27, cy + sh*.28),
+        (cx + sw*.18, cy + sh*.43),
+        (cx - sw*.18, cy + sh*.43),
+        (cx - sw*.27, cy + sh*.28),
+        (cx - sw*.31 + dx*.20, cy + sh*.02),
+        (cx - sw*.17 + dx*.42, cy - sh*.13),
+        (cx - sw*.095 + dx*.70, cy - sh*.32),
     ]
-    draw.polygon(pts, fill=body)
+    draw.polygon(shell, fill=body)
+
+    # Left/right body shading adds volume.
     draw.polygon([
-        (cx - sw*.31, cy + sh*.04),
-        (cx - sw*.24 + dx*.18, cy - sh*.26),
-        (cx + dx*.55, cy - sh*.36),
-        (cx + sw*.24 + dx*.18, cy - sh*.26),
-        (cx + sw*.31, cy + sh*.04),
-    ], fill=dark)
-    draw.rounded_rectangle([cx-sw*.43, cy+sh*.19, cx+sw*.43, cy+sh*.31], radius=max(2,int(8*scale)), fill=(32,32,35,255))
-    draw.rounded_rectangle([cx-sw*.38, cy+sh*.33, cx-sw*.08, cy+sh*.40], radius=max(2,int(5*scale)), fill=light)
-    draw.rounded_rectangle([cx+sw*.08, cy+sh*.33, cx+sw*.38, cy+sh*.40], radius=max(2,int(5*scale)), fill=light)
+        (cx-sw*.27+dx*.18, cy-sh*.04),
+        (cx-sw*.16+dx*.34, cy-sh*.12),
+        (cx-sw*.10, cy+sh*.26),
+        (cx-sw*.21, cy+sh*.34),
+    ], fill=body_light)
+    draw.polygon([
+        (cx+sw*.27+dx*.18, cy-sh*.04),
+        (cx+sw*.16+dx*.34, cy-sh*.12),
+        (cx+sw*.10, cy+sh*.26),
+        (cx+sw*.21, cy+sh*.34),
+    ], fill=body_dark)
+
+    # Long nose highlight / livery stripe.
+    draw.polygon([
+        (cx+dx*.90, cy-sh*.44),
+        (cx+sw*.037+dx*.55, cy-sh*.19),
+        (cx+sw*.045, cy+sh*.20),
+        (cx-sw*.045, cy+sh*.20),
+        (cx-sw*.037+dx*.55, cy-sh*.19),
+    ], fill=accent)
+
+    # Cockpit / halo area.
+    draw.ellipse(
+        [cx-sw*.13+dx*.20, cy-sh*.08, cx+sw*.13+dx*.20, cy+sh*.19],
+        fill=cockpit,
+    )
+    draw.ellipse(
+        [cx-sw*.08+dx*.18, cy-sh*.035, cx+sw*.02+dx*.18, cy+sh*.085],
+        fill=(80, 96, 111, 210),
+    )
+    halo_y = cy + sh*.005
+    draw.arc(
+        [cx-sw*.12+dx*.20, halo_y-sh*.06, cx+sw*.12+dx*.20, halo_y+sh*.07],
+        start=190, end=350, fill=(42, 44, 48, 255), width=max(2, int(7*scale)),
+    )
+
+    # Rear engine cover and wing assembly.
+    draw.polygon([
+        (cx-sw*.16, cy+sh*.18),
+        (cx+sw*.16, cy+sh*.18),
+        (cx+sw*.20, cy+sh*.37),
+        (cx-sw*.20, cy+sh*.37),
+    ], fill=body_dark)
+    draw.rounded_rectangle(
+        [cx-sw*.40, cy+sh*.37, cx+sw*.40, cy+sh*.44],
+        radius=max(2, int(7*scale)), fill=carbon,
+    )
+    draw.rounded_rectangle(
+        [cx-sw*.28, cy+sh*.335, cx+sw*.28, cy+sh*.375],
+        radius=max(2, int(5*scale)), fill=accent,
+    )
+
+    # Small rear lamps / hot exhaust detail for the hero car.
+    if player:
+        lamp_y = cy + sh*.285
+        draw.rounded_rectangle(
+            [cx-sw*.14, lamp_y, cx-sw*.035, lamp_y+sh*.052],
+            radius=max(2, int(4*scale)), fill=(255, 219, 92, 255),
+        )
+        draw.rounded_rectangle(
+            [cx+sw*.035, lamp_y, cx+sw*.14, lamp_y+sh*.052],
+            radius=max(2, int(4*scale)), fill=(255, 219, 92, 255),
+        )
 
 
 def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Image:
