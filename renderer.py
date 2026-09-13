@@ -25,7 +25,7 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
     """Polished arcade Formula-style car rendered procedurally."""
     sw = 132 * scale
     sh = 218 * scale
-    # Keep steering readable without deforming the nose every frame.
+    # Keep steering readable without letting the nose deform/wiggle.
     dx = max(-0.08, min(0.08, heading)) * 18 * scale
 
     if player:
@@ -50,13 +50,18 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
     rw, rh = sw*.18, sh*.19
     for side in (-1, 1):
         sx = cx + side * sw*.43
-        draw.rounded_rectangle([sx-fw/2, cy-sh*.24, sx+fw/2, cy-sh*.24+fh], radius=max(2, int(7*scale)), fill=wheel)
-        draw.rounded_rectangle([sx-rw/2, cy+sh*.14, sx+rw/2, cy+sh*.14+rh], radius=max(2, int(8*scale)), fill=wheel)
+        draw.rounded_rectangle([sx-fw/2, cy-sh*.24, sx+fw/2, cy-sh*.24+fh],
+                               radius=max(2, int(7*scale)), fill=wheel)
+        draw.rounded_rectangle([sx-rw/2, cy+sh*.14, sx+rw/2, cy+sh*.14+rh],
+                               radius=max(2, int(8*scale)), fill=wheel)
 
     wing_y = cy-sh*.42
-    draw.rounded_rectangle([cx-sw*.43+dx*.18, wing_y, cx+sw*.43+dx*.18, wing_y+sh*.055], radius=max(2, int(7*scale)), fill=carbon)
-    draw.rectangle([cx-sw*.47+dx*.18, wing_y+sh*.01, cx-sw*.39+dx*.18, wing_y+sh*.075], fill=body_dark)
-    draw.rectangle([cx+sw*.39+dx*.18, wing_y+sh*.01, cx+sw*.47+dx*.18, wing_y+sh*.075], fill=body_dark)
+    draw.rounded_rectangle([cx-sw*.43+dx*.18, wing_y, cx+sw*.43+dx*.18, wing_y+sh*.055],
+                           radius=max(2, int(7*scale)), fill=carbon)
+    draw.rectangle([cx-sw*.47+dx*.18, wing_y+sh*.01, cx-sw*.39+dx*.18, wing_y+sh*.075],
+                   fill=body_dark)
+    draw.rectangle([cx+sw*.39+dx*.18, wing_y+sh*.01, cx+sw*.47+dx*.18, wing_y+sh*.075],
+                   fill=body_dark)
 
     shell = [
         (cx+dx, cy-sh*.48),
@@ -95,9 +100,11 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
     ], fill=accent)
 
     draw.ellipse([cx-sw*.13+dx*.20, cy-sh*.08, cx+sw*.13+dx*.20, cy+sh*.19], fill=cockpit)
-    draw.ellipse([cx-sw*.08+dx*.18, cy-sh*.035, cx+sw*.02+dx*.18, cy+sh*.085], fill=(80, 96, 111, 210))
+    draw.ellipse([cx-sw*.08+dx*.18, cy-sh*.035, cx+sw*.02+dx*.18, cy+sh*.085],
+                 fill=(80, 96, 111, 210))
     halo_y = cy+sh*.005
-    draw.arc([cx-sw*.12+dx*.20, halo_y-sh*.06, cx+sw*.12+dx*.20, halo_y+sh*.07], start=190, end=350, fill=(42, 44, 48, 255), width=max(2, int(7*scale)))
+    draw.arc([cx-sw*.12+dx*.20, halo_y-sh*.06, cx+sw*.12+dx*.20, halo_y+sh*.07],
+             start=190, end=350, fill=(42, 44, 48, 255), width=max(2, int(7*scale)))
 
     draw.polygon([
         (cx-sw*.16, cy+sh*.18),
@@ -105,13 +112,17 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
         (cx+sw*.20, cy+sh*.37),
         (cx-sw*.20, cy+sh*.37),
     ], fill=body_dark)
-    draw.rounded_rectangle([cx-sw*.40, cy+sh*.37, cx+sw*.40, cy+sh*.44], radius=max(2, int(7*scale)), fill=carbon)
-    draw.rounded_rectangle([cx-sw*.28, cy+sh*.335, cx+sw*.28, cy+sh*.375], radius=max(2, int(5*scale)), fill=accent)
+    draw.rounded_rectangle([cx-sw*.40, cy+sh*.37, cx+sw*.40, cy+sh*.44],
+                           radius=max(2, int(7*scale)), fill=carbon)
+    draw.rounded_rectangle([cx-sw*.28, cy+sh*.335, cx+sw*.28, cy+sh*.375],
+                           radius=max(2, int(5*scale)), fill=accent)
 
     if player:
         lamp_y = cy+sh*.285
-        draw.rounded_rectangle([cx-sw*.14, lamp_y, cx-sw*.035, lamp_y+sh*.052], radius=max(2, int(4*scale)), fill=(255, 219, 92, 255))
-        draw.rounded_rectangle([cx+sw*.035, lamp_y, cx+sw*.14, lamp_y+sh*.052], radius=max(2, int(4*scale)), fill=(255, 219, 92, 255))
+        draw.rounded_rectangle([cx-sw*.14, lamp_y, cx-sw*.035, lamp_y+sh*.052],
+                               radius=max(2, int(4*scale)), fill=(255, 219, 92, 255))
+        draw.rounded_rectangle([cx+sw*.035, lamp_y, cx+sw*.14, lamp_y+sh*.052],
+                               radius=max(2, int(4*scale)), fill=(255, 219, 92, 255))
 
 
 def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Image:
@@ -123,129 +134,152 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
         p = y / HORIZON
         d.rectangle([0, y, W, y+8], fill=(int(95+50*p), int(155+48*p), int(220+25*p), 255))
 
-    mountains = [(0,610),(120,500),(235,585),(360,455),(480,565),(620,430),(760,555),(900,470),(1080,585),(1080,760),(0,760)]
+    mountains = [(0,610),(120,500),(235,585),(360,455),(480,565),(620,430),
+                 (760,555),(900,470),(1080,585),(1080,760),(0,760)]
     d.polygon(mountains, fill=(81,111,122,255))
     d.rectangle([0,600,W,H], fill=(78,139,72,255))
 
-    shake_x = int((rng.random()-.5) * 22 * frame.shake)
     curve = frame.road_curve
+
+    # Camera is now attached to the action: lateral sway from steering, road vibration,
+    # and impact shake. The small vertical bob also moves the horizon/road projection.
+    impact_shake = int((rng.random() - .5) * 30 * frame.shake)
+    cam_sway = int(frame.player.heading * 105 + math.sin(frame.t * 10.5) * (3 + frame.player.speed * 7))
+    cam_bob = int(
+        math.sin(frame.t * (7.5 + frame.player.speed * 5.5)) * (2 + frame.player.speed * 9)
+        + frame.shake * 12
+    )
+    cam_x = impact_shake + cam_sway
+    horizon_y = HORIZON + cam_bob
 
     slices = 105
     for j in range(slices):
         p0 = j / slices
         p1 = (j+1) / slices
-        y0 = HORIZON + (p0**1.72) * (H-HORIZON)
-        y1 = HORIZON + (p1**1.72) * (H-HORIZON)
+        y0 = horizon_y + (p0**1.72) * (H-horizon_y)
+        y1 = horizon_y + (p1**1.72) * (H-horizon_y)
         half0 = 65 + (p0**1.28) * ROAD_BOTTOM
         half1 = 65 + (p1**1.28) * ROAD_BOTTOM
         bend0 = curve * (p0**2.05) * 420 + math.sin(frame.t*.33) * p0 * 75
         bend1 = curve * (p1**2.05) * 420 + math.sin(frame.t*.33) * p1 * 75
-        c0 = W/2 + bend0 + shake_x
-        c1 = W/2 + bend1 + shake_x
+        c0 = W/2 + bend0 + cam_x
+        c1 = W/2 + bend1 + cam_x
 
         grass = (72,132,67,255) if j % 2 else (76,143,70,255)
         d.polygon([(0,y0),(W,y0),(W,y1),(0,y1)], fill=grass)
         shoulder = 28 + p1*30
-        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)], fill=(204,204,196,255))
+        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),
+                   (c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],
+                  fill=(204,204,196,255))
         road = (50,52,55,255) if j % 2 else (54,56,59,255)
         d.polygon([(c0-half0,y0),(c0+half0,y0),(c1+half1,y1),(c1-half1,y1)], fill=road)
 
         curb = (237,62,55,255) if (j//3)%2 else (242,242,235,255)
         curbw0, curbw1 = max(2, half0*.045), max(2, half1*.045)
-        d.polygon([(c0-half0,y0),(c0-half0+curbw0,y0),(c1-half1+curbw1,y1),(c1-half1,y1)], fill=curb)
-        d.polygon([(c0+half0-curbw0,y0),(c0+half0,y0),(c1+half1,y1),(c1+half1-curbw1,y1)], fill=curb)
+        d.polygon([(c0-half0,y0),(c0-half0+curbw0,y0),
+                   (c1-half1+curbw1,y1),(c1-half1,y1)], fill=curb)
+        d.polygon([(c0+half0-curbw0,y0),(c0+half0,y0),
+                   (c1+half1,y1),(c1+half1-curbw1,y1)], fill=curb)
 
-        # IMPORTANT: subtract time here. The dash pattern now travels from the
-        # horizon toward the camera, creating correct forward-motion parallax.
-        if (j - int(frame.t * (25 + frame.player.speed*18))) % 12 < 6 and j > 10:
+        # Faster dash cadence makes the road rush toward the camera.
+        if (j - int(frame.t * (38 + frame.player.speed * 34))) % 10 < 5 and j > 8:
             lw0 = max(2, half0*.016)
             lw1 = max(2, half1*.016)
-            d.polygon([(c0-lw0,y0),(c0+lw0,y0),(c1+lw1,y1),(c1-lw1,y1)], fill=(245,240,210,225))
+            d.polygon([(c0-lw0,y0),(c0+lw0,y0),(c1+lw1,y1),(c1-lw1,y1)],
+                      fill=(245,240,210,230))
 
-    # Fast roadside streaks add speed without replacing the clean background style.
-    speed_alpha = int(24 + frame.player.speed * 70)
-    for k in range(13):
-        p = ((k/13) + (frame.t * (0.12 + frame.player.speed*.11))) % 1.0
-        y = HORIZON + (p**1.72)*(H-HORIZON)
+    # Faster roadside posts/streaks create peripheral speed while keeping the clean landscape.
+    speed_alpha = int(35 + frame.player.speed * 110)
+    for k in range(15):
+        p = ((k/15) + (frame.t * (0.17 + frame.player.speed*.15))) % 1.0
+        y = horizon_y + (p**1.72)*(H-horizon_y)
         half = 65 + (p**1.28)*ROAD_BOTTOM
-        center = W/2 + curve*(p**2.05)*420 + math.sin(frame.t*.33)*p*75 + shake_x
+        center = W/2 + curve*(p**2.05)*420 + math.sin(frame.t*.33)*p*75 + cam_x
         size = 8 + 28*p
         for side in (-1,1):
             x = center + side*(half+55+50*p)
             d.rectangle([x-size*.18,y-size*1.8,x+size*.18,y], fill=(245,245,238,255))
             d.rectangle([x-size*.18,y-size*1.15,x+size*.18,y-size*.78], fill=(28,28,30,255))
-            if p > .56:
-                d.line([(x, y+5), (x, y+22+55*p)], fill=(255,255,255,speed_alpha), width=max(1,int(2+3*p)))
+            if p > .42:
+                d.line([(x, y+3), (x, y+30+80*p)],
+                       fill=(255,255,255,speed_alpha),
+                       width=max(1,int(2+4*p)))
 
-    # Rivals from far to near. Keep them in the same visual car-size class as the player.
+    # Rivals are same visual size class as player and move more aggressively.
     for idx, (z, lane, _pace) in enumerate(sorted(frame.rivals, key=lambda r:r[0])):
         p = 0.13 + z*0.67
-        y = HORIZON + (p**1.72)*(H-HORIZON)
+        y = horizon_y + (p**1.72)*(H-horizon_y)
         half = 65 + (p**1.28)*ROAD_BOTTOM
-        center = W/2 + curve*(p**2.05)*420 + math.sin(frame.t*.33)*p*75 + shake_x
+        center = W/2 + curve*(p**2.05)*420 + math.sin(frame.t*.33)*p*75 + cam_x
         x = center + lane*half*.68
-        rival_heading = math.sin(frame.t*(1.15+idx*.04)+idx) * 0.045
-        _car(d, x, y, 0.82+0.33*p, rival_heading, False)
+        rival_heading = math.sin(frame.t*(1.5+idx*.06)+idx) * 0.08
+        _car(d, x, y, 0.84+0.28*p, rival_heading, False)
 
-    py = 1605
-    pp = ((py-HORIZON)/(H-HORIZON))**(1/1.72)
+    py = 1605 + int(cam_bob * 0.7)
+    pp = ((py-horizon_y)/(H-horizon_y))**(1/1.72)
     phalf = 65 + (pp**1.28)*ROAD_BOTTOM
-    pcenter = W/2 + curve*(pp**2.05)*420 + math.sin(frame.t*.33)*pp*75 + shake_x
+    pcenter = W/2 + curve*(pp**2.05)*420 + math.sin(frame.t*.33)*pp*75 + cam_x
     px = pcenter + frame.player.lane*phalf*.68
 
-    # Skid marks and crash debris happen behind the player, before the car is drawn.
     if abs(frame.player.heading) > .12 or frame.player.crashed:
         skid_alpha = 100 if frame.player.crashed else 55
         for side in (-1, 1):
             sx = px + side*54
-            d.line([(sx, py+76), (sx-frame.player.heading*125, py+220)], fill=(14,14,16,skid_alpha), width=9)
+            d.line([(sx, py+76), (sx-frame.player.heading*125, py+220)],
+                   fill=(14,14,16,skid_alpha), width=9)
 
     if frame.player.crashed:
-        for n in range(16):
+        for n in range(22):
             ang = rng.uniform(math.pi*.05, math.pi*.95)
-            dist = rng.uniform(24, 135)
-            sx = px + math.cos(ang)*dist + rng.uniform(-15,15)
+            dist = rng.uniform(24, 160)
+            sx = px + math.cos(ang)*dist + rng.uniform(-18,18)
             sy = py + math.sin(ang)*dist
-            r = rng.uniform(3, 8)
+            r = rng.uniform(3, 9)
             spark = rng.choice([(255,210,80,230),(255,118,48,230),(255,240,170,220)])
             d.ellipse([sx-r, sy-r, sx+r, sy+r], fill=spark)
-        for n in range(8):
-            sx = px + rng.uniform(-80,80)
-            sy = py + rng.uniform(65,175)
-            r = rng.uniform(15,34)
-            d.ellipse([sx-r, sy-r, sx+r, sy+r], fill=(76,80,86,rng.randint(30,80)))
+        for n in range(11):
+            sx = px + rng.uniform(-95,95)
+            sy = py + rng.uniform(65,190)
+            r = rng.uniform(15,38)
+            d.ellipse([sx-r, sy-r, sx+r, sy+r],
+                      fill=(76,80,86,rng.randint(30,90)))
 
     _car(d, px, py, 1.15, frame.player.heading, True)
 
-    # Extra speed lines at the screen edge when pace rises.
-    if frame.player.speed > .52:
-        intensity = min(1.0, (frame.player.speed-.52)/.30)
-        for n in range(12):
-            yy = 700 + ((n*101 + int(frame.t*430)) % 830)
-            length = 28 + int(105*intensity)
-            alpha = int(28 + 75*intensity)
-            x1 = 35 + (n%3)*20
+    # Stronger edge streaks at speed.
+    if frame.player.speed > .48:
+        intensity = min(1.0, (frame.player.speed-.48)/.34)
+        for n in range(16):
+            yy = 660 + ((n*83 + int(frame.t*520)) % 900)
+            length = 40 + int(150*intensity)
+            alpha = int(45 + 110*intensity)
+            x1 = 28 + (n%4)*18
             x2 = W - x1
             d.line([(x1, yy), (x1, yy+length)], fill=(255,255,255,alpha), width=3)
             d.line([(x2, yy), (x2, yy+length)], fill=(255,255,255,alpha), width=3)
 
-    d.rounded_rectangle([48,52,W-48,240], radius=34, fill=(9,14,21,182), outline=(255,255,255,45), width=2)
+    d.rounded_rectangle([48,52,W-48,240], radius=34,
+                        fill=(9,14,21,182), outline=(255,255,255,45), width=2)
     f1 = _font(54,True)
     f2 = _font(34,True)
     d.text((82,78), f"EP. {episode:03d}", font=f1, fill=(255,255,255,255))
     level = max(1,int(skill*100))
     d.text((82,151), f"DRIVER LEVEL {level}", font=f2, fill=(237,242,248,255))
-    d.text((W-330,95), f"{int(frame.player.speed*310):03d} KM/H", font=f2, fill=(255,224,126,255))
+    d.text((W-330,95), f"{int(frame.player.speed*310):03d} KM/H",
+           font=f2, fill=(255,224,126,255))
 
     bx0,by0,bx1,by1=82,211,W-82,226
     d.rounded_rectangle([bx0,by0,bx1,by1], radius=7, fill=(255,255,255,42))
-    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*skill,by1], radius=7, fill=(255,213,90,245))
+    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*skill,by1],
+                        radius=7, fill=(255,213,90,245))
 
     if frame.event_text:
         text = frame.event_text
         box = d.textbbox((0,0), text, font=f1)
         tw = box[2]-box[0]
-        d.rounded_rectangle([W/2-tw/2-34,330,W/2+tw/2+34,420], radius=24, fill=(0,0,0,178), outline=(255,255,255,34), width=2)
+        d.rounded_rectangle([W/2-tw/2-34,330,W/2+tw/2+34,420],
+                            radius=24, fill=(0,0,0,178),
+                            outline=(255,255,255,34), width=2)
         d.text((W/2-tw/2,346), text, font=f1, fill=(255,255,255,255))
 
     label = "BEGINNER" if skill < .28 else "GETTING GOOD" if skill < .58 else "PRO"
@@ -255,7 +289,7 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
     d.text((W/2-tw/2,1766), label, font=f1, fill=(255,255,255,255))
 
     if frame.shake > .2:
-        overlay = Image.new("RGBA",(W,H),(255,255,255,int(42*min(1.0,frame.shake))))
+        overlay = Image.new("RGBA",(W,H),(255,255,255,int(48*min(1.0,frame.shake))))
         img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
     return img
