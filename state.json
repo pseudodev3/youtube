@@ -1,9 +1,9 @@
 {
-  "episode": 4,
-  "driver_skill": 0.242,
+  "episode": 5,
+  "driver_skill": 0.276,
   "road_tier": 1,
   "car_tier": 2,
-  "wins": 3,
+  "wins": 4,
   "crashes": 0,
   "unlocked_roads": [
     "training"
