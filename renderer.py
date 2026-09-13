@@ -85,12 +85,23 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
         draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y+sh*.052], radius=max(2,int(4*scale)), fill=(255,219,92,255))
 
 
+def _rotated_car(img: Image.Image, cx: float, cy: float, scale: float, angle_deg: float,
+                 player: bool = False, color_id: int = 0):
+    """Rotate the whole car sprite, used only for real drifts/spins."""
+    box = int(max(300, 360 * scale))
+    layer = Image.new("RGBA", (box, box), (0,0,0,0))
+    ld = ImageDraw.Draw(layer, "RGBA")
+    _car(ld, box/2, box/2, scale, 0.0, player, color_id)
+    rotated = layer.rotate(-angle_deg, resample=Image.Resampling.BICUBIC, expand=True)
+    x = int(cx - rotated.width/2)
+    y = int(cy - rotated.height/2)
+    img.paste(rotated, (x,y), rotated)
+
+
 def _road_center(p: float, frame, cam_x: float) -> float:
-    # Near and far curvature are blended differently across depth, creating actual
-    # S-bends instead of translating one straight trapezoid left/right.
-    near = frame.road_curve * (p ** 1.70) * 620
-    far = frame.road_curve_far * math.sin(p * math.pi) * 250
-    sweep = math.sin(frame.t * .18 + p * 2.6) * 42 * p
+    near = frame.road_curve * (p ** 1.62) * 700
+    far = frame.road_curve_far * math.sin(p * math.pi) * 300
+    sweep = math.sin(frame.t * .14 + p * 3.0) * 50 * p
     return W/2 + near + far + sweep + cam_x
 
 
@@ -107,17 +118,18 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
     d.polygon(mountains, fill=(81,111,122,255))
     d.rectangle([0,600,W,H], fill=(78,139,72,255))
 
-    # Stable camera: gentle steering follow + impact only. No high-frequency bob.
-    cam_x = int(frame.player.heading * 30 + (rng.random()-.5) * 12 * frame.shake)
-    horizon_y = HORIZON + int(math.sin(frame.t*1.8)*1.5 + frame.shake*3)
+    # Keep the camera calm. Action now comes from racing/drifting, not screen shake.
+    cam_x = int(frame.player.heading * 18 + (rng.random()-.5) * 7 * frame.shake)
+    horizon_y = HORIZON + int(frame.shake * 2)
 
+    width_mul = frame.road_width / 0.82
     slices = 110
     for j in range(slices):
         p0 = j/slices; p1 = (j+1)/slices
         y0 = horizon_y + (p0**1.72)*(H-horizon_y)
         y1 = horizon_y + (p1**1.72)*(H-horizon_y)
-        half0 = 65 + (p0**1.28)*ROAD_BOTTOM
-        half1 = 65 + (p1**1.28)*ROAD_BOTTOM
+        half0 = (65 + (p0**1.28)*ROAD_BOTTOM) * width_mul
+        half1 = (65 + (p1**1.28)*ROAD_BOTTOM) * width_mul
         c0 = _road_center(p0, frame, cam_x)
         c1 = _road_center(p1, frame, cam_x)
 
@@ -137,11 +149,26 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             lw0=max(2,half0*.016); lw1=max(2,half1*.016)
             d.polygon([(c0-lw0,y0),(c0+lw0,y0),(c1+lw1,y1),(c1-lw1,y1)], fill=(245,240,210,225))
 
-    # Roadside posts: enough motion to sell speed, but no giant streak spam.
+    # Chevron boards appear on the outside of harder bends so the road reads as a
+    # genuine corner/hairpin instead of a moving straight strip.
+    if abs(frame.road_curve) > .45:
+        outside = 1 if frame.road_curve > 0 else -1
+        for n in range(4):
+            p = .48 + n*.09
+            y = horizon_y + (p**1.72)*(H-horizon_y)
+            half = (65+(p**1.28)*ROAD_BOTTOM) * width_mul
+            center = _road_center(p,frame,cam_x)
+            x = center + outside*(half+62)
+            s = 12 + 24*p
+            d.rectangle([x-s,y-s*.55,x+s,y+s*.55], fill=(245,210,45,245))
+            direction = -outside
+            pts=[(x-direction*s*.45,y-s*.32),(x+direction*s*.35,y),(x-direction*s*.45,y+s*.32)]
+            d.line(pts, fill=(24,27,31,255), width=max(3,int(s*.18)), joint="curve")
+
     for k in range(14):
         p=((k/14)+(frame.t*(.13+frame.player.speed*.10)))%1.0
         y=horizon_y+(p**1.72)*(H-horizon_y)
-        half=65+(p**1.28)*ROAD_BOTTOM
+        half=(65+(p**1.28)*ROAD_BOTTOM) * width_mul
         center=_road_center(p,frame,cam_x)
         size=8+28*p
         for side in (-1,1):
@@ -149,34 +176,53 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             d.rectangle([x-size*.18,y-size*1.8,x+size*.18,y], fill=(245,245,238,255))
             d.rectangle([x-size*.18,y-size*1.15,x+size*.18,y-size*.78], fill=(28,28,30,255))
 
-    # Persistent rivals naturally move closer/farther as passes happen.
-    for rival in sorted(frame.rivals, key=lambda r:r.z):
-        z=max(0.0,min(1.14,rival.z))
-        p=.10+z*.72
+    # Fixed field only: once a rival has left the race view it stays gone.
+    for rival in sorted([r for r in frame.rivals if r.active], key=lambda r:r.z):
+        if rival.z < 0.0 or rival.z > 1.18:
+            continue
+        p=.10+rival.z*.72
         y=horizon_y+(p**1.72)*(H-horizon_y)
-        half=65+(p**1.28)*ROAD_BOTTOM
+        half=(65+(p**1.28)*ROAD_BOTTOM) * width_mul
         center=_road_center(p,frame,cam_x)
         x=center+rival.lane*half*.68
         scale=.62+.52*p
-        _car(d,x,y,scale,rival.heading,False,rival.color)
+
+        if rival.behavior == "spin" or abs(rival.rotation) > .10:
+            angle = rival.rotation * 70.0
+            _rotated_car(img,x,y,scale,angle,False,rival.color)
+            d = ImageDraw.Draw(img,"RGBA")
+            # comic smoke puff makes the spin obvious
+            for n in range(5):
+                rr = rng.uniform(6,15)*scale
+                sx=x+rng.uniform(-28,28)*scale
+                sy=y+rng.uniform(30,85)*scale
+                d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,80)))
+        else:
+            _car(d,x,y,scale,rival.heading,False,rival.color)
+
+        # Panic braking is visible, not just a text event.
+        if rival.behavior == "panic":
+            s=scale
+            d.ellipse([x-38*s,y+62*s,x-22*s,y+78*s],fill=(255,65,45,220))
+            d.ellipse([x+22*s,y+62*s,x+38*s,y+78*s],fill=(255,65,45,220))
 
     py=1605
     pp=((py-horizon_y)/(H-horizon_y))**(1/1.72)
-    phalf=65+(pp**1.28)*ROAD_BOTTOM
+    phalf=(65+(pp**1.28)*ROAD_BOTTOM) * width_mul
     pcenter=_road_center(pp,frame,cam_x)
     px=pcenter+frame.player.lane*phalf*.68
 
-    # Drift is shown with sustained tyre smoke + longer skid arcs, not camera shake.
+    # Bigger smoke, longer skid arcs, and whole-car rotation make drift unmistakable.
     if frame.player.drifting:
-        drift_dir = 1 if frame.player.heading > 0 else -1
-        for n in range(12):
-            sy=py+70+rng.uniform(0,150)
-            sx=px+rng.uniform(-58,58)-drift_dir*(sy-py)*.18
-            r=rng.uniform(10,26)
-            d.ellipse([sx-r,sy-r,sx+r,sy+r], fill=(220,224,228,rng.randint(25,65)))
+        drift_dir = 1 if frame.player.drift_angle > 0 else -1
+        for n in range(20):
+            sy=py+72+rng.uniform(0,190)
+            sx=px+rng.uniform(-72,72)-drift_dir*(sy-py)*.24
+            r=rng.uniform(12,32)
+            d.ellipse([sx-r,sy-r,sx+r,sy+r], fill=(220,224,228,rng.randint(35,85)))
         for side in (-1,1):
             sx=px+side*54
-            d.line([(sx,py+70),(sx-drift_dir*65,py+245)], fill=(18,18,20,90), width=8)
+            d.line([(sx,py+78),(sx-drift_dir*105,py+285)], fill=(18,18,20,115), width=10)
     elif abs(frame.player.heading)>.15 or frame.player.crashed:
         for side in (-1,1):
             sx=px+side*54
@@ -188,7 +234,11 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             sx=px+math.cos(ang)*dist; sy=py+math.sin(ang)*dist; r=rng.uniform(3,8)
             d.ellipse([sx-r,sy-r,sx+r,sy+r], fill=rng.choice([(255,210,80,220),(255,118,48,220),(255,240,170,210)]))
 
-    _car(d,px,py,1.15,frame.player.heading,True,0)
+    if frame.player.drifting and abs(frame.player.drift_angle) > .08:
+        _rotated_car(img,px,py,1.15,frame.player.drift_angle*42.0,True,0)
+        d=ImageDraw.Draw(img,"RGBA")
+    else:
+        _car(d,px,py,1.15,frame.player.heading,True,0)
 
     d.rounded_rectangle([48,52,W-48,240], radius=34, fill=(9,14,21,182), outline=(255,255,255,45), width=2)
     f1=_font(54,True); f2=_font(34,True)
@@ -213,6 +263,6 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
     d.text((W/2-tw/2,1766),label,font=f1,fill=(255,255,255,255))
 
     if frame.shake>.2:
-        overlay=Image.new("RGBA",(W,H),(255,255,255,int(24*min(1.0,frame.shake))))
+        overlay=Image.new("RGBA",(W,H),(255,255,255,int(20*min(1.0,frame.shake))))
         img=Image.alpha_composite(img.convert("RGBA"),overlay).convert("RGB")
     return img
