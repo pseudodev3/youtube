@@ -82,55 +82,55 @@ class RaceEngine:
             edge = 0.82 - 0.14 * difficulty
             danger = abs(self.player.lane) > edge
             fail_chance = (1.0 - self.skill) * difficulty * 0.020
-            if danger and self.rng.random() < 0.24 + fail_chance:
+            if danger and self.rng.random() < 0.28 + fail_chance:
                 self.player.crashed = True
-                self.player.crash_timer = self.rng.randint(25, 48)
+                self.player.crash_timer = self.rng.randint(24, 52)
                 self.player.heading += self.rng.choice([-1, 1]) * self.rng.uniform(0.15, 0.32)
                 event = self.rng.choice(["TOO WIDE", "BRAKE!", "SPIN!", "NOOO"])
                 shake = 1.0
                 self.last_event = i
 
-        # More frequent story beats. They are still stochastic, but the Short should
-        # rarely go several seconds with nothing changing.
-        if i - self.last_event > self.fps * 2.2:
+        # Frequent story beats so the Short rarely coasts for long.
+        if i - self.last_event > self.fps * 2.6:
             p = self.rng.random()
-            if p < 0.012:
+            if p < 0.010:
                 event = self.rng.choice([
-                    "LATE BRAKE!",
-                    "SEND IT",
-                    "THAT WAS CLOSE",
-                    "CLEAN OVERTAKE",
-                    "NICE SAVE",
-                    "LOCKED IN",
-                    "FULL THROTTLE",
+                    "BIG SAVE",
+                    "LATE BRAKE",
+                    "THREE WIDE",
+                    "DIVEBOMB",
+                    "INSANE LINE",
+                    "TRAFFIC CHAOS",
+                    "NEAR MISS",
                 ])
                 self.last_event = i
 
-        # Rivals now have different pace, weaving, and occasional aggressive lunges.
-        # As the player improves, traffic also becomes more demanding.
+        # Seven rivals with more dramatic weaving and periodic pack battles.
         rivals: list[tuple[float, float, float]] = []
-        rival_count = 6
-        for n in range(rival_count):
-            base_pace = 0.075 + 0.010 * n + 0.015 * self.skill
-            z = (0.07 + n * 0.155 + t * base_pace) % 1.0
-            weave = math.sin(t * (0.55 + 0.09 * n) + n * 1.35) * (0.42 + 0.05 * (n % 2))
+        for n in range(7):
+            pace = 0.62 + n * 0.05 + self.skill * 0.08
+            z = (0.06 + n * 0.13 + (t * (0.16 + 0.022 * n + self.skill * 0.03))) % 1.0
 
-            # Every few seconds one rival makes a dramatic lane move.
-            lunge = math.sin(t * 1.7 + self.chaos_phase + n * 2.1)
-            if lunge > 0.78:
-                weave += 0.24 * math.sin(t * 5.2 + n)
+            lane = (
+                math.sin(t * (0.75 + 0.12 * n) + n * 1.45) * 0.52
+                + math.sin(t * (1.9 + 0.07 * n) + n) * 0.12
+            )
 
-            lane = max(-0.78, min(0.78, weave))
-            pace = 0.52 + n * 0.045
+            # Pack/battle moments bring a few cars close together.
+            if int(t * 0.55) % 6 == 3 and n < 3:
+                lane = (-0.52 + n * 0.52) + math.sin(t * 3.0 + n) * 0.05
+                z = 0.44 + n * 0.07
+
+            lane = max(-0.82, min(0.82, lane))
             rivals.append((z, lane, pace))
 
-        # Near-miss detection gives the chaos some actual relationship to what is on screen.
+        # Near-miss detection gives the chaos a relationship to what is on screen.
         if not self.player.crashed and i - self.last_event > self.fps * 1.4:
             for z, lane, _ in rivals:
                 if 0.72 < z < 0.91 and abs(lane - self.player.lane) < 0.15:
-                    if self.rng.random() < 0.08:
+                    if self.rng.random() < 0.10:
                         event = self.rng.choice(["NEAR MISS!", "DOOR TO DOOR", "SQUEEZED!", "INCHES!"])
-                        shake = max(shake, 0.18)
+                        shake = max(shake, 0.22)
                         self.last_event = i
                         break
 
