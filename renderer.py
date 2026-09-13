@@ -25,7 +25,8 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
     """Polished arcade Formula-style car rendered procedurally."""
     sw = 132 * scale
     sh = 218 * scale
-    dx = max(-0.30, min(0.30, heading)) * 115 * scale
+    # Keep steering readable without deforming the nose every frame.
+    dx = max(-0.08, min(0.08, heading)) * 18 * scale
 
     if player:
         body = (236, 54, 50, 255)
@@ -176,7 +177,7 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             if p > .56:
                 d.line([(x, y+5), (x, y+22+55*p)], fill=(255,255,255,speed_alpha), width=max(1,int(2+3*p)))
 
-    # Rivals from far to near.
+    # Rivals from far to near. Keep them in the same visual car-size class as the player.
     for idx, (z, lane, _pace) in enumerate(sorted(frame.rivals, key=lambda r:r[0])):
         p = 0.13 + z*0.67
         y = HORIZON + (p**1.72)*(H-HORIZON)
@@ -184,7 +185,7 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
         center = W/2 + curve*(p**2.05)*420 + math.sin(frame.t*.33)*p*75 + shake_x
         x = center + lane*half*.68
         rival_heading = math.sin(frame.t*(1.15+idx*.04)+idx) * 0.045
-        _car(d, x, y, 0.14+0.48*p, rival_heading, False)
+        _car(d, x, y, 0.82+0.33*p, rival_heading, False)
 
     py = 1605
     pp = ((py-HORIZON)/(H-HORIZON))**(1/1.72)
