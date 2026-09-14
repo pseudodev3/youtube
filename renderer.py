@@ -160,8 +160,31 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     mountains=[(0,610),(120,500),(235,585),(360,455),(480,565),(620,430),(760,555),(900,470),(1080,585),(1080,760),(0,760)]
     d.polygon(mountains,fill=(81,111,122,255)); d.rectangle([0,600,W,H],fill=(78,139,72,255))
 
-    cam_x=int(frame.player.heading*18+(rng.random()-.5)*7*frame.shake)
-    horizon_y=HORIZON+int(frame.shake*2)
+    # Find the strongest current contact in the pack. The contact timer naturally
+    # gives us a short decay envelope, so impacts punch once and then settle instead
+    # of turning the whole race into a shaky camera.
+    impact_strength = 0.0
+    impact_side = 0.0
+    impact_timer = 0
+    contact_sources = [(frame.player.contact_strength, frame.player.contact_side, frame.player.contact_timer)]
+    contact_sources += [
+        (rv.contact_strength, rv.contact_side, rv.contact_timer)
+        for rv in frame.rivals if rv.active
+    ]
+    for strength, side, timer in contact_sources:
+        if timer > 0 and strength > impact_strength:
+            impact_strength = float(strength)
+            impact_side = float(side)
+            impact_timer = int(timer)
+    freshness = max(0.0, min(1.0, impact_timer / 12.0))
+    impact_pulse = (impact_strength ** 1.35) * (freshness ** 1.55) if impact_strength >= 0.48 else 0.0
+
+    cam_x=int(
+        frame.player.heading*18
+        + impact_side*18*impact_pulse
+        + (rng.random()-.5)*3.2*frame.shake
+    )
+    horizon_y=HORIZON+int(frame.shake*1.2)
     width_mul=frame.road_width/.82
 
     slices=110
@@ -302,6 +325,22 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
         _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
         _draw_impact_debris(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+
+    # A tiny scene-only punch-in makes a real hit feel expensive. Do this before
+    # drawing the HUD so the interface remains stable and readable.
+    if impact_pulse > 0.035:
+        zoom = 1.0 + 0.018 * impact_pulse
+        zw, zh = int(W * zoom), int(H * zoom)
+        scene = img.resize((zw, zh), Image.Resampling.BICUBIC)
+        cx = zw // 2 + int(impact_side * 10 * impact_pulse)
+        cy = zh // 2 - int(5 * impact_pulse)
+        left = max(0, min(zw - W, cx - W // 2))
+        top = max(0, min(zh - H, cy - H // 2))
+        img = scene.crop((left, top, left + W, top + H))
+        d = ImageDraw.Draw(img, 'RGBA')
+        if impact_strength >= 0.82 and freshness > 0.62:
+            flash_alpha = int(20 * impact_strength * freshness)
+            d.rectangle([0, 0, W, H], fill=(255, 245, 225, flash_alpha))
 
     # Compact race strip: readable when glanced at, quiet when watching the action.
     d.rounded_rectangle([56,54,W-56,180],radius=28,fill=(9,14,21,148),outline=(255,255,255,28),width=2)

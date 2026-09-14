@@ -65,6 +65,9 @@ def render_video(state):
     crashed = False
     speeds: list[float] = []
     crash_flags: list[bool] = []
+    impact_strengths: list[float] = []
+    impact_sides: list[float] = []
+    event_texts: list[str | None] = []
 
     try:
         for i in range(total):
@@ -72,6 +75,23 @@ def render_video(state):
             crashed = crashed or rf.player.crashed
             speeds.append(float(rf.player.speed))
             crash_flags.append(bool(rf.player.crashed))
+
+            strongest = 0.0
+            strongest_side = 0.0
+            if rf.player.contact_timer > 0 and rf.player.contact_strength > strongest:
+                strongest = float(rf.player.contact_strength)
+                strongest_side = float(rf.player.contact_side)
+            for rival in rf.rivals:
+                if rival.active and rival.contact_timer > 0 and rival.contact_strength > strongest:
+                    strongest = float(rival.contact_strength)
+                    strongest_side = float(rival.contact_side)
+            if rf.player.crashed and strongest < 0.62:
+                strongest = 0.62
+                strongest_side = float(rf.player.contact_side)
+            impact_strengths.append(strongest)
+            impact_sides.append(strongest_side)
+            event_texts.append(rf.event_text)
+
             frame = render_frame(rf, episode=episode, skill=skill, frame_no=i)
             proc.stdin.write(frame.tobytes())
     finally:
@@ -82,8 +102,17 @@ def render_video(state):
     if code != 0:
         raise RuntimeError(f"ffmpeg video render failed with exit code {code}")
 
-    # Build engine / wind / impact audio directly from the same race telemetry.
-    synthesize_audio(audio_path, speeds, crash_flags, FPS)
+    # Build engine, original music, tyre and impact audio from the same telemetry.
+    synthesize_audio(
+        audio_path,
+        speeds,
+        crash_flags,
+        impact_strengths,
+        impact_sides,
+        event_texts,
+        FPS,
+        seed=seed,
+    )
 
     mux = [
         "ffmpeg", "-y",
