@@ -1,0 +1,31 @@
+name: Apply production architecture patch
+
+on:
+  push:
+    paths:
+      - ".github/workflows/production-arch-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply engine and renderer integration
+        run: python tools/production_arch_patch.py
+      - name: Validate production modules
+        run: python -m py_compile main.py audio.py race_engine.py renderer.py career.py showrunner.py story_beats.py track_system.py quality_control.py metadata.py youtube_upload.py
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add race_engine.py renderer.py
+          git commit -m "Integrate showrunner plans and road themes"
+          git push
