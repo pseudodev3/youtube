@@ -152,13 +152,46 @@ def _draw_impact_debris(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y:
 
 def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
-    img=Image.new("RGB",(W,H),(116,174,224)); d=ImageDraw.Draw(img,"RGBA")
+    theme=getattr(frame,"track_theme","country")
+    palettes={
+        "training":((116,174,224),(81,111,122),(78,139,72)),
+        "country":((116,174,224),(81,111,122),(78,139,72)),
+        "mountain":((126,166,205),(72,94,108),(68,111,72)),
+        "night_city":((24,34,66),(31,37,55),(28,38,49)),
+        "rain":((77,101,126),(65,75,87),(60,80,72)),
+        "coast":((92,176,222),(72,116,139),(74,146,123)),
+        "snow":((183,205,226),(135,151,166),(210,218,221)),
+        "canyon":((196,139,100),(122,77,58),(143,89,55)),
+        "desert":((222,177,116),(164,113,72),(190,143,83)),
+        "forest":((83,133,123),(49,77,66),(47,94,59)),
+        "street":((105,124,145),(63,68,76),(70,73,77)),
+        "tunnel":((46,52,65),(36,39,47),(47,48,51)),
+        "neon_rain":((38,31,78),(45,40,69),(34,42,54)),
+        "alpine":((159,190,218),(107,128,144),(184,199,194)),
+        "extreme_canyon":((187,109,77),(105,57,49),(121,69,50)),
+    }
+    sky,mountain_col,ground=palettes.get(theme,palettes["country"])
+    img=Image.new("RGB",(W,H),sky); d=ImageDraw.Draw(img,"RGBA")
 
     for y in range(0,HORIZON,8):
         p=y/HORIZON
-        d.rectangle([0,y,W,y+8],fill=(int(95+50*p),int(155+48*p),int(220+25*p),255))
+        d.rectangle([0,y,W,y+8],fill=(int(sky[0]*(.82+.18*p)),int(sky[1]*(.82+.18*p)),int(sky[2]*(.88+.12*p)),255))
     mountains=[(0,610),(120,500),(235,585),(360,455),(480,565),(620,430),(760,555),(900,470),(1080,585),(1080,760),(0,760)]
-    d.polygon(mountains,fill=(81,111,122,255)); d.rectangle([0,600,W,H],fill=(78,139,72,255))
+    d.polygon(mountains,fill=mountain_col+(255,)); d.rectangle([0,600,W,H],fill=ground+(255,))
+    if theme in {"rain","neon_rain"}:
+        for _ in range(90):
+            x=rng.randrange(0,W); y=rng.randrange(0,H); length=rng.randrange(16,42)
+            d.line([(x,y),(x-7,y+length)],fill=(205,225,245,68),width=2)
+    elif theme in {"snow","alpine"}:
+        for _ in range(65):
+            x=rng.randrange(0,W); y=rng.randrange(0,H); rr=rng.randrange(2,6)
+            d.ellipse([x-rr,y-rr,x+rr,y+rr],fill=(245,248,250,135))
+    elif theme in {"night_city","neon_rain","tunnel"}:
+        for x in range(45,W,95):
+            h=rng.randrange(45,170); d.rectangle([x,600-h,x+48,600],fill=(20,24,35,180))
+            if theme!="tunnel":
+                for wy in range(600-h+12,590,24):
+                    d.rectangle([x+8,wy,x+14,wy+7],fill=(255,210,92,145))
 
     # Find the strongest current contact in the pack. The contact timer naturally
     # gives us a short decay envelope, so impacts punch once and then settle instead
@@ -371,9 +404,9 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         title=_font(58,True); sub=_font(32,True)
         alpha=230 if frame.t<1.8 else int(max(0,230*(2.25-frame.t)/.45))
         d.rounded_rectangle([95,1260,W-95,1510],radius=36,fill=(5,8,12,alpha),outline=(255,215,90,min(220,alpha)),width=3)
-        hook=f"CAN RED REACH P{frame.target_position}?"
+        hook=getattr(frame,"hook_text",f"CAN RED REACH P{frame.target_position}?")
         bb=d.textbbox((0,0),hook,font=title); d.text((W/2-(bb[2]-bb[0])/2,1300),hook,font=title,fill=(255,255,255,alpha))
-        rival=f"WATCH {frame.featured_rival}."
+        rival=f"{getattr(frame,'track_name','CIRCUIT')} • WATCH {frame.featured_rival}"
         bb=d.textbbox((0,0),rival,font=sub); d.text((W/2-(bb[2]-bb[0])/2,1390),rival,font=sub,fill=(255,220,95,alpha))
         hint="something always happens around him..."
         hintf=_font(27,False); bb=d.textbbox((0,0),hint,font=hintf)

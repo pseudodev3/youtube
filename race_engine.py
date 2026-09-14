@@ -65,6 +65,9 @@ class RaceFrame:
     target_position: int
     featured_rival: str
     objective_text: str
+    track_name: str
+    track_theme: str
+    hook_text: str
 
 
 class RaceEngine:
@@ -89,7 +92,7 @@ class RaceEngine:
         "showboat": "would rather look cool than win",
     }
 
-    def __init__(self, skill: float, seed: int, duration: float = 24.0, fps: int = 30):
+    def __init__(self, skill: float, seed: int, duration: float = 24.0, fps: int = 30, plan: dict | None = None):
         self.skill = max(0.02, min(0.98, skill))
         self.seed = seed
         self.duration = duration
@@ -103,17 +106,27 @@ class RaceEngine:
         self.crash_chain_until = -999
         self.held_event: str | None = None
         self.event_until = -999
+        self.plan = plan or {}
+        self.track = dict(self.plan.get("track", {}))
 
-        self.target_position = 5 if self.skill < .34 else 4 if self.skill < .58 else 3
-        self.featured_index = seed % len(self.DRIVER_CAST)
-        self.featured_rival = self.DRIVER_CAST[self.featured_index][0]
+        fallback_target = 5 if self.skill < .34 else 4 if self.skill < .58 else 3
+        self.target_position = int(self.plan.get("target_position", fallback_target))
+        planned_rival = str(self.plan.get("featured_rival", ""))
+        names = [name for name, _ in self.DRIVER_CAST]
+        self.featured_rival = planned_rival if planned_rival in names else names[seed % len(names)]
+        self.featured_index = names.index(self.featured_rival)
         featured_personality = self.DRIVER_CAST[self.featured_index][1]
-        self.objective_text = (
-            f"TARGET P{self.target_position} • {self.featured_rival} "
-            f"{self.PERSONALITY_LINES[featured_personality]}"
+        self.objective_text = str(self.plan.get(
+            "objective_text",
+            f"TARGET P{self.target_position} • {self.featured_rival} {self.PERSONALITY_LINES[featured_personality]}",
+        ))
+        self.hook_text = str(self.plan.get("hook", f"CAN RED REACH P{self.target_position}?"))
+        self.planned_beats = list(self.plan.get("beats", []))
+        self.incident_times = (
+            [float(beat.get("time", 0.0)) for beat in self.planned_beats]
+            if self.planned_beats
+            else [3.1, 6.6, 10.2, 14.0, 17.7, 20.7]
         )
-
-        self.incident_times = [3.1, 6.6, 10.2, 14.0, 17.7, 20.7]
         self.incident_cursor = 0
 
         self.rivals: list[RivalState] = []
@@ -149,7 +162,7 @@ class RaceEngine:
         return x * x * (3.0 - 2.0 * x)
 
     def _curve(self, t: float) -> float:
-        section_len = 3.25
+        section_len = float(self.track.get("section_len", 3.25))
         section = int(t // section_len) % 7
         u = (t % section_len) / section_len
         arch = math.sin(math.pi * u)
@@ -168,7 +181,7 @@ class RaceEngine:
             shape = 1.00 * (arch ** 1.14)
         else:
             shape = -0.66 * arch
-        challenge = 0.78 + 0.30 * self.skill
+        challenge = (0.78 + 0.30 * self.skill) * float(self.track.get("curve_scale", 1.0))
         texture = 0.08 * math.sin(t * 0.82 + self.phase)
         return max(-1.0, min(1.0, shape * challenge + texture))
 
@@ -177,7 +190,9 @@ class RaceEngine:
 
     def _difficulty(self, t: float) -> float:
         ramp = min(1.0, t / max(1.0, self.duration * 0.62))
-        return 0.30 + 0.70 * ramp
+        base = 0.30 + 0.70 * ramp
+        track_difficulty = float(self.track.get("difficulty", base))
+        return max(0.25, min(1.0, base * (0.82 + 0.28 * track_difficulty)))
 
     def _position(self) -> int:
         return 1 + sum(1 for r in self.rivals if r.z < 1.01)
@@ -243,7 +258,7 @@ class RaceEngine:
         self.player.crash_rotation += direction * 0.08
         self.player.speed *= 0.56
 
-    def _start_incident(self, rival: RivalState, i: int) -> str:
+    def _start_incident(self, rival: RivalState, i: int, forced_action: str | None = None) -> str:
         choices = {
             "blocker": ["block", "brake_check", "swerve"],
             "chaos": ["spin", "swerve", "brake_check"],
@@ -252,7 +267,8 @@ class RaceEngine:
             "rocket": ["divebomb", "showboat", "brake_check"],
             "showboat": ["showboat", "swerve", "spin"],
         }.get(rival.personality, ["swerve", "panic", "spin"])
-        behavior = self.rng.choice(choices)
+        allowed = {"block", "brake_check", "swerve", "spin", "panic", "showboat", "divebomb"}
+        behavior = forced_action if forced_action in allowed else self.rng.choice(choices)
 
         if behavior == "spin":
             self._kick_spin(rival, severity=0.70)
@@ -665,9 +681,15 @@ class RaceEngine:
             self.player.contact_strength *= 0.80
 
         if self.incident_cursor < len(self.incident_times) and t >= self.incident_times[self.incident_cursor]:
-            driver = self._pick_incident_driver()
+            beat = self.planned_beats[self.incident_cursor] if self.incident_cursor < len(self.planned_beats) else {}
+            wanted = beat.get("driver")
+            driver = next((r for r in self.rivals if r.active and r.name == wanted), None) if wanted else None
+            if driver is None:
+                driver = self._pick_incident_driver()
             if driver is not None:
-                event = self._start_incident(driver, i)
+                event = self._start_incident(driver, i, forced_action=beat.get("action"))
+                if beat.get("caption"):
+                    event = str(beat["caption"])
                 self.last_event = i
             self.incident_cursor += 1
 
@@ -950,7 +972,8 @@ class RaceEngine:
             self.last_event = i
 
         road_width = 0.86 - abs(curve) * (0.08 + 0.07 * self.skill)
-        road_width = max(0.67, min(0.88, road_width))
+        road_width *= float(self.track.get("width_scale", 1.0))
+        road_width = max(0.62, min(0.92, road_width))
         position = self._position()
         progress = min(1.0, t / max(0.1, self.duration))
 
@@ -978,4 +1001,7 @@ class RaceEngine:
             target_position=self.target_position,
             featured_rival=self.featured_rival,
             objective_text=self.objective_text,
+            track_name=str(self.track.get("name", "Circuit")),
+            track_theme=str(self.track.get("theme", "country")),
+            hook_text=self.hook_text,
         )
