@@ -1,0 +1,394 @@
+name: Apply impact and pileup tuning
+
+on:
+  push:
+    paths:
+      - ".github/workflows/impact-pileup-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply stronger impact and natural pileups
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('race_engine.py')
+          s = p.read_text()
+
+          old = '''        self.last_event = -999
+        self.last_drift = -999
+'''
+          new = '''        self.last_event = -999
+        self.last_drift = -999
+        self.crash_chain_hits = 0
+        self.crash_chain_until = -999
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    @staticmethod
+    def _contact_side(a_lane: float, b_lane: float, fallback: float = 1.0) -> float:
+        if abs(a_lane - b_lane) < 1e-4:
+            return fallback
+        return 1.0 if b_lane > a_lane else -1.0
+
+    def _resolve_rival_contacts(self, i: int) -> str | None:
+'''
+          new = '''    @staticmethod
+    def _contact_side(a_lane: float, b_lane: float, fallback: float = 1.0) -> float:
+        if abs(a_lane - b_lane) < 1e-4:
+            return fallback
+        return 1.0 if b_lane > a_lane else -1.0
+
+    def _record_crash_chain(self, i: int, strength: float) -> str | None:
+        """Track connected hard hits so a second impact reads as a pileup."""
+        if strength < 0.72:
+            return None
+        if i > self.crash_chain_until:
+            self.crash_chain_hits = 0
+        self.crash_chain_hits += 1
+        self.crash_chain_until = i + int(self.fps * 0.85)
+        if self.crash_chain_hits == 2:
+            self.last_event = i
+            return "PILEUP! 😭"
+        return None
+
+    def _react_to_crash_hazards(self, i: int) -> None:
+        """Following cars react to a real crashed car instead of receiving scripted spins.
+
+        Sensible drivers brake and swerve. Reckless/late drivers sometimes commit to
+        the gap and let the ordinary collision solver create the next hit naturally.
+        """
+        hazards = [
+            r for r in self.rivals
+            if r.active and r.behavior in {"spin", "big_spin", "aftermath", "recover"}
+        ]
+        if not hazards:
+            return
+
+        for driver in self.rivals:
+            if not driver.active or driver in hazards or driver.behavior != "normal":
+                continue
+            candidates = []
+            for hazard in hazards:
+                gap = driver.z - hazard.z
+                lateral = abs(driver.lane - hazard.lane)
+                if 0.018 < gap < 0.17 and lateral < 0.34:
+                    candidates.append((gap, lateral, hazard))
+            if not candidates:
+                continue
+
+            gap, lateral, hazard = min(candidates, key=lambda x: x[0])
+            reckless = driver.personality in {"chaos", "divebomb", "showboat"}
+            fail_chance = 0.16 + (0.30 if gap < 0.080 else 0.0) + (0.18 if reckless else 0.0)
+
+            if self.rng.random() < fail_chance:
+                # A late reaction keeps the car mostly on course. If the gap closes,
+                # the standard hitboxes produce the secondary collision.
+                driver.behavior = "late_react"
+                driver.behavior_timer = int(self.fps * 0.38)
+                driver.target_lane = driver.lane
+                driver.speed *= 0.985
+            else:
+                driver.behavior = "avoid_crash"
+                driver.behavior_timer = int(self.fps * 0.62)
+                escape = -1.0 if hazard.lane >= driver.lane else 1.0
+                driver.target_lane = max(-0.72, min(0.72, driver.lane + escape * (0.42 + 0.08 * (1.0 - lateral / 0.34))))
+                driver.speed *= 0.94
+
+    def _resolve_rival_contacts(self, i: int) -> str | None:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                else:
+                    push = lane_overlap * 0.56 + 0.006
+                    timer = int(self.fps * 0.30)
+                    heading_impulse = 0.045 + strength * 0.080
+                    speed_keep = 0.978 - strength * 0.018
+                    mix = 0.36
+'''
+          new = '''                else:
+                    # Hard contact needs a visible first beat before the spin/slide.
+                    push = lane_overlap * 0.72 + 0.012
+                    timer = int(self.fps * 0.38)
+                    heading_impulse = 0.070 + strength * 0.105
+                    speed_keep = 0.952 - strength * 0.026
+                    mix = 0.42
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                a.speed *= speed_keep
+                b.speed *= speed_keep
+
+                if strength > 0.90:
+'''
+          new = '''                a.speed *= speed_keep
+                b.speed *= speed_keep
+
+                if strength >= 0.82:
+                    # Rebound both laterally and longitudinally so the impact itself is
+                    # readable before either car enters its spin state.
+                    rebound = 0.005 + 0.006 * strength
+                    a.lane = max(-0.80, min(0.80, a.lane - side_a * rebound))
+                    b.lane = max(-0.80, min(0.80, b.lane - side_b * rebound))
+                    trailing, leading = (a, b) if a.z > b.z else (b, a)
+                    trailing.speed *= 0.84
+                    leading.speed = min(0.99, leading.speed * (1.025 + 0.012 * strength))
+                    trailing.z += 0.008 * strength
+                    leading.z -= 0.006 * strength
+
+                if strength > 0.90:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                    if event:
+                        self.last_event = i
+        return event
+
+    def _resolve_player_contacts(self, i: int) -> str | None:
+'''
+          new = '''                    if event:
+                        self.last_event = i
+
+                chain_event = self._record_crash_chain(i, strength)
+                if chain_event:
+                    event = chain_event
+        return event
+
+    def _resolve_player_contacts(self, i: int) -> str | None:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            else:
+                push = lane_overlap * 0.57 + 0.007
+                timer = int(self.fps * 0.30)
+                heading_impulse = 0.050 + strength * 0.085
+                player_keep = 0.976 - strength * 0.020
+                rival_keep = 0.978 - strength * 0.018
+'''
+          new = '''            else:
+                push = lane_overlap * 0.74 + 0.012
+                timer = int(self.fps * 0.38)
+                heading_impulse = 0.075 + strength * 0.110
+                player_keep = 0.948 - strength * 0.028
+                rival_keep = 0.952 - strength * 0.025
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            self.player.speed *= player_keep
+            rival.speed *= rival_keep
+
+            if strength > 0.93:
+'''
+          new = '''            self.player.speed *= player_keep
+            rival.speed *= rival_keep
+
+            if strength >= 0.84:
+                rebound = 0.006 + 0.006 * strength
+                self.player.lane = max(-0.80, min(0.80, self.player.lane - side_red * rebound))
+                rival.lane = max(-0.80, min(0.80, rival.lane - side_rival * rebound))
+                if rival.z < player_z:
+                    # Red arrived from behind: Red checks up, rival gets punched forward.
+                    self.player.speed *= 0.83
+                    rival.speed = min(0.99, rival.speed * (1.03 + 0.01 * strength))
+                    rival.z -= 0.008 * strength
+                else:
+                    # Rival hit Red from behind.
+                    rival.speed *= 0.83
+                    self.player.speed = min(0.99, self.player.speed * (1.025 + 0.01 * strength))
+                    rival.z += 0.008 * strength
+
+            if strength > 0.93:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                if event:
+                    self.last_event = i
+        return event
+
+    def frame(self, i: int) -> RaceFrame:
+'''
+          new = '''                if event:
+                    self.last_event = i
+
+            chain_event = self._record_crash_chain(i, strength)
+            if chain_event:
+                event = chain_event
+        return event
+
+    def frame(self, i: int) -> RaceFrame:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        if self.player.contact_timer > 0:
+            self.player.contact_timer -= 1
+        else:
+            self.player.contact_strength *= 0.80
+'''
+          new = '''        if self.player.contact_timer > 0:
+            self.player.contact_timer -= 1
+            if self.player.contact_strength >= 0.82 and not self.player.crashed:
+                self.player.lane -= self.player.contact_side * (0.0018 + 0.0028 * self.player.contact_strength)
+                self.player.lane = max(-0.82, min(0.82, self.player.lane))
+        else:
+            self.player.contact_strength *= 0.80
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            if rival.contact_timer > 0:
+                rival.contact_timer -= 1
+            else:
+                rival.contact_strength *= 0.80
+'''
+          new = '''            if rival.contact_timer > 0:
+                rival.contact_timer -= 1
+                if rival.contact_strength >= 0.82 and rival.behavior not in {"spin", "big_spin", "aftermath", "recover"}:
+                    rival.lane -= rival.contact_side * (0.0018 + 0.0028 * rival.contact_strength)
+                    rival.lane = max(-0.82, min(0.82, rival.lane))
+            else:
+                rival.contact_strength *= 0.80
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''                elif rival.behavior == "divebomb":
+                    rival.speed += (min(0.99, rival.base_speed + 0.24) - rival.speed) * 0.17
+                    rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
+'''
+          new = '''                elif rival.behavior == "divebomb":
+                    rival.speed += (min(0.99, rival.base_speed + 0.24) - rival.speed) * 0.17
+                    rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
+                elif rival.behavior == "avoid_crash":
+                    rival.speed += (rival.base_speed * 0.68 - rival.speed) * 0.15
+                elif rival.behavior == "late_react":
+                    # Too late to make a clean avoidance move; this often becomes the
+                    # second hit if the crashed car still blocks the lane.
+                    rival.speed += (rival.base_speed * 0.90 - rival.speed) * 0.08
+                    rival.heading += math.sin(i * 0.41) * 0.012
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        if t > self.duration - 5.0:
+'''
+          new = '''        self._react_to_crash_hazards(i)
+
+        if t > self.duration - 5.0:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        if rival_contact_event:
+            event = rival_contact_event
+            shake = max(shake, 0.12)
+'''
+          new = '''        if rival_contact_event:
+            event = rival_contact_event
+            peak_contact = max((r.contact_strength for r in self.rivals if r.contact_timer > 0), default=0.0)
+            shake = max(shake, 0.10 + 0.10 * peak_contact)
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+
+          p = Path('renderer.py')
+          s = p.read_text()
+
+          old = '''    count = max(3, int(3 + (strength - 0.45) * 13))
+    for _ in range(count):
+        length = rng.uniform(10, 36) * scale * (0.65 + strength)
+'''
+          new = '''    count = max(3, int(4 + (strength - 0.45) * 17))
+    for _ in range(count):
+        length = rng.uniform(10, 42) * scale * (0.65 + strength)
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
+'''
+          new = '''def _draw_impact_debris(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: float,
+                        scale: float, side: float, strength: float):
+    if strength < 0.82:
+        return
+    sx = x + side * 52 * scale
+    sy = y + 12 * scale
+    for _ in range(4 + int(strength * 5)):
+        dist = rng.uniform(18, 72) * scale
+        angle = rng.uniform(-1.0, 1.0) + (0 if side > 0 else math.pi)
+        cx = sx + math.cos(angle) * dist
+        cy = sy + math.sin(angle) * dist + rng.uniform(5, 28) * scale
+        r = rng.uniform(2.5, 6.0) * scale
+        shade = rng.choice([(24,25,28,230),(55,58,62,220),(255,185,70,230)])
+        d.polygon([(cx-r,cy-r*.4),(cx+r,cy),(cx-r*.3,cy+r)],fill=shade)
+
+
+def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 7.0
+'''
+          new = '''            amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 10.0
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+            _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+'''
+          new = '''            _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+            _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+            _draw_impact_debris(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 7.5
+'''
+          new = '''        amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 10.5
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''        _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+        _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+'''
+          new = '''        _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+        _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+        _draw_impact_debris(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+          python -m py_compile race_engine.py renderer.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add race_engine.py renderer.py
+          git commit -m "Strengthen impacts and add chain-reaction pileups"
+          git push
