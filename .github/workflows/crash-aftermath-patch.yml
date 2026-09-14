@@ -1,0 +1,99 @@
+name: Apply crash aftermath tuning
+
+on:
+  push:
+    paths:
+      - ".github/workflows/crash-aftermath-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Tune crash aftermath and recovery
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          race = Path('race_engine.py')
+          text = race.read_text()
+
+          text = text.replace(
+              '    crash_slide_velocity: float = 0.0\n',
+              '    crash_slide_velocity: float = 0.0\n    crash_recovery_timer: int = 0\n',
+              1,
+          )
+
+          old = '''                if strength > 0.90:\n                    victim = a if self.rng.random() < 0.5 else b\n                    self._kick_spin(victim, victim.contact_side, strength, full_spin=True)\n                elif strength > 0.72:\n                    victim = a if self.rng.random() < 0.5 else b\n                    self._kick_spin(victim, victim.contact_side, strength)'''
+          new = '''                if strength > 0.90:\n                    # A real crash affects both cars. One gets the dramatic full spin;\n                    # the other is knocked into a shorter loss-of-control slide.\n                    victim = a if self.rng.random() < 0.5 else b\n                    other = b if victim is a else a\n                    self._kick_spin(victim, victim.contact_side, strength, full_spin=True)\n                    self._kick_spin(other, other.contact_side, max(0.72, strength * 0.78))\n                    victim.speed *= 0.72\n                    other.speed *= 0.78\n                elif strength > 0.72:\n                    victim = a if self.rng.random() < 0.5 else b\n                    self._kick_spin(victim, victim.contact_side, strength)'''
+          if old not in text:
+              raise SystemExit('rival crash block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''            if strength > 0.93:\n                if reckless and self.rng.random() < 0.72:\n                    self._kick_spin(rival, side_rival, strength, full_spin=True)\n                elif not self.player.crashed:\n                    self._kick_player_crash(side_red, strength)\n            elif strength > 0.76:'''
+          new = '''            if strength > 0.93:\n                # Heavy Red-vs-rival contact has consequences for BOTH cars.\n                self._kick_spin(rival, side_rival, strength, full_spin=reckless or self.rng.random() < 0.55)\n                if not self.player.crashed:\n                    self._kick_player_crash(side_red, strength)\n            elif strength > 0.76:'''
+          if old not in text:
+              raise SystemExit('player crash block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''                elif rival.behavior == "recover":\n                    rival.rotation *= 0.72\n                    rival.spin_rate *= 0.55\n                    rival.slide_velocity *= 0.72\n                    recovery_speed = max(0.18, rival.base_speed * 0.45)\n                    rival.speed += (recovery_speed - rival.speed) * 0.10\n                    rival.target_lane = rival.lane\n                    rival.heading *= 0.70'''
+          new = '''                elif rival.behavior == "aftermath":\n                    # Let the viewer register the crash. The car stays slow and slightly\n                    # out of shape instead of instantly snapping back into the race.\n                    aftermath_speed = max(0.07, rival.base_speed * 0.16)\n                    rival.speed += (aftermath_speed - rival.speed) * 0.12\n                    rival.rotation *= 0.95\n                    rival.spin_rate *= 0.42\n                    rival.slide_velocity *= 0.82\n                    rival.lane += rival.slide_velocity\n                    rival.target_lane = rival.lane\n                    rival.heading *= 0.62\n                elif rival.behavior == "recover":\n                    rival.rotation *= 0.80\n                    rival.spin_rate *= 0.48\n                    rival.slide_velocity *= 0.72\n                    recovery_speed = max(0.15, rival.base_speed * 0.34)\n                    rival.speed += (recovery_speed - rival.speed) * 0.065\n                    rival.target_lane = rival.lane\n                    rival.heading *= 0.72'''
+          if old not in text:
+              raise SystemExit('recover behavior block not found')
+          text = text.replace(old, new, 1)
+
+          old = '''                if rival.behavior in {"spin", "big_spin"}:\n                    turn = 360.0 / 70.0\n                    rival.rotation = ((rival.rotation + turn / 2) % turn) - turn / 2\n                    rival.behavior = "recover"\n                    rival.behavior_timer = int(self.fps * 0.55)\n                    rival.spin_rate *= 0.40\n                    rival.slide_velocity *= 0.50\n                elif rival.behavior == "recover":\n                    rival.behavior = "normal"'''
+          new = '''                if rival.behavior in {"spin", "big_spin"}:\n                    was_big = rival.behavior == "big_spin"\n                    turn = 360.0 / 70.0\n                    rival.rotation = ((rival.rotation + turn / 2) % turn) - turn / 2\n                    rival.behavior = "aftermath"\n                    rival.behavior_timer = int(self.fps * (0.68 if was_big else 0.34))\n                    rival.spin_rate *= 0.28\n                    rival.slide_velocity *= 0.44\n                    rival.speed = min(rival.speed, rival.base_speed * (0.13 if was_big else 0.24))\n                elif rival.behavior == "aftermath":\n                    rival.behavior = "recover"\n                    rival.behavior_timer = int(self.fps * 0.82)\n                    rival.spin_rate *= 0.35\n                    rival.slide_velocity *= 0.48\n                elif rival.behavior == "recover":\n                    rival.behavior = "normal"'''
+          if old not in text:
+              raise SystemExit('transition block not found')
+          text = text.replace(old, new, 1)
+
+          text = text.replace(
+              '                if r.active and r.behavior not in {"spin", "big_spin", "recover"}\n',
+              '                if r.active and r.behavior not in {"spin", "big_spin", "aftermath", "recover"}\n',
+              1,
+          )
+          text = text.replace(
+              '            if rival.behavior not in {"spin", "big_spin", "recover"}:\n',
+              '            if rival.behavior not in {"spin", "big_spin", "aftermath", "recover"}:\n',
+              1,
+          )
+
+          old = '''            if self.player.crash_timer <= 0:\n                self.player.crashed = False\n                self.player.lane *= 0.65\n                self.player.speed = max(0.30, self.player.speed)\n                self.player.crash_rotation = 0.0\n                self.player.crash_spin_rate = 0.0\n                self.player.crash_slide_velocity = 0.0\n                event = "RED'S BACK!"\n                self.last_event = i'''
+          new = '''            if self.player.crash_timer <= 0:\n                if self.player.crash_recovery_timer <= 0:\n                    self.player.crash_recovery_timer = int(self.fps * 0.82)\n                    self.player.speed = min(self.player.speed, 0.18)\n                    self.player.crash_spin_rate *= 0.30\n                    self.player.crash_slide_velocity *= 0.45\n                self.player.crash_recovery_timer -= 1\n                self.player.crash_rotation *= 0.84\n                self.player.crash_spin_rate *= 0.52\n                self.player.crash_slide_velocity *= 0.72\n                self.player.speed += (0.24 - self.player.speed) * 0.055\n                if self.player.crash_recovery_timer <= 0:\n                    self.player.crashed = False\n                    self.player.lane *= 0.72\n                    self.player.speed = max(0.24, self.player.speed)\n                    self.player.crash_rotation = 0.0\n                    self.player.crash_spin_rate = 0.0\n                    self.player.crash_slide_velocity = 0.0\n                    self.player.crash_recovery_timer = 0\n                    event = "RED'S BACK!"\n                    self.last_event = i'''
+          if old not in text:
+              raise SystemExit('player recovery block not found')
+          text = text.replace(old, new, 1)
+
+          race.write_text(text)
+
+          renderer = Path('renderer.py')
+          text = renderer.read_text()
+          text = text.replace(
+              '        if rival.behavior in {"spin","big_spin","recover"} or abs(rival.rotation)>.10:\n',
+              '        if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:\n',
+              1,
+          )
+          text = text.replace(
+              '            smoke_count=16 if rival.behavior=="big_spin" else 7\n',
+              '            smoke_count=16 if rival.behavior=="big_spin" else 10 if rival.behavior=="aftermath" else 7\n',
+              1,
+          )
+          renderer.write_text(text)
+          PY
+          python -m py_compile race_engine.py renderer.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add race_engine.py renderer.py
+          git commit -m "Make crash aftermath visible before recovery"
+          git push
