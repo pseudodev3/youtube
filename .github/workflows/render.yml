@@ -1,4 +1,4 @@
-name: Render racing short
+name: GRIDLOOP production episode
 
 on:
   workflow_dispatch:
@@ -11,14 +11,28 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: gridloop-production
+  cancel-in-progress: false
+
 jobs:
-  render:
+  produce:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
+    env:
+      FPS: "30"
+      DURATION: "24"
+      MAX_RENDER_ATTEMPTS: "3"
+      YOUTUBE_UPLOAD_ENABLED: ${{ (secrets.YOUTUBE_CLIENT_ID != '') && (secrets.YOUTUBE_CLIENT_SECRET != '') && (secrets.YOUTUBE_REFRESH_TOKEN != '') }}
+      YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+      YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+      YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,28 +47,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Render short
-        env:
-          FPS: "30"
-          DURATION: "24"
+      - name: Produce, QC and optionally upload episode
         run: python main.py
 
-      - name: Upload rendered video
+      - name: Upload production artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: racing-short
+          name: gridloop-episode
           path: output/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
-      - name: Save progression
+      - name: Save uploaded career progression
+        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state.json
+          git add career_state.json
           if git diff --cached --quiet; then
-            echo "No state change"
+            echo "Career unchanged (preview mode or scheduled run skipped)."
           else
-            git commit -m "Advance racing progression [skip ci]"
+            git commit -m "Advance GRIDLOOP career after upload [skip ci]"
             git push
           fi
