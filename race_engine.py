@@ -21,6 +21,7 @@ class CarState:
     crash_rotation: float = 0.0
     crash_spin_rate: float = 0.0
     crash_slide_velocity: float = 0.0
+    crash_recovery_timer: int = 0
 
 
 @dataclass
@@ -355,8 +356,14 @@ class RaceEngine:
                 b.speed *= speed_keep
 
                 if strength > 0.90:
+                    # A real crash affects both cars. One gets the dramatic full spin;
+                    # the other is knocked into a shorter loss-of-control slide.
                     victim = a if self.rng.random() < 0.5 else b
+                    other = b if victim is a else a
                     self._kick_spin(victim, victim.contact_side, strength, full_spin=True)
+                    self._kick_spin(other, other.contact_side, max(0.72, strength * 0.78))
+                    victim.speed *= 0.72
+                    other.speed *= 0.78
                 elif strength > 0.72:
                     victim = a if self.rng.random() < 0.5 else b
                     self._kick_spin(victim, victim.contact_side, strength)
@@ -439,9 +446,9 @@ class RaceEngine:
             rival.speed *= rival_keep
 
             if strength > 0.93:
-                if reckless and self.rng.random() < 0.72:
-                    self._kick_spin(rival, side_rival, strength, full_spin=True)
-                elif not self.player.crashed:
+                # Heavy Red-vs-rival contact has consequences for BOTH cars.
+                self._kick_spin(rival, side_rival, strength, full_spin=reckless or self.rng.random() < 0.55)
+                if not self.player.crashed:
                     self._kick_player_crash(side_red, strength)
             elif strength > 0.76:
                 if reckless or self.rng.random() < 0.66:
@@ -537,14 +544,25 @@ class RaceEngine:
                         rival.slide_velocity *= 0.78
                     rival.target_lane = rival.lane
                     rival.heading *= 0.62
-                elif rival.behavior == "recover":
-                    rival.rotation *= 0.72
-                    rival.spin_rate *= 0.55
-                    rival.slide_velocity *= 0.72
-                    recovery_speed = max(0.18, rival.base_speed * 0.45)
-                    rival.speed += (recovery_speed - rival.speed) * 0.10
+                elif rival.behavior == "aftermath":
+                    # Let the viewer register the crash. The car stays slow and slightly
+                    # out of shape instead of instantly snapping back into the race.
+                    aftermath_speed = max(0.07, rival.base_speed * 0.16)
+                    rival.speed += (aftermath_speed - rival.speed) * 0.12
+                    rival.rotation *= 0.95
+                    rival.spin_rate *= 0.42
+                    rival.slide_velocity *= 0.82
+                    rival.lane += rival.slide_velocity
                     rival.target_lane = rival.lane
-                    rival.heading *= 0.70
+                    rival.heading *= 0.62
+                elif rival.behavior == "recover":
+                    rival.rotation *= 0.80
+                    rival.spin_rate *= 0.48
+                    rival.slide_velocity *= 0.72
+                    recovery_speed = max(0.15, rival.base_speed * 0.34)
+                    rival.speed += (recovery_speed - rival.speed) * 0.065
+                    rival.target_lane = rival.lane
+                    rival.heading *= 0.72
                 elif rival.behavior == "showboat":
                     rival.target_lane = 0.58 * math.sin(i * 0.24)
                     rival.rotation = math.sin(i * 0.20) * 0.13
@@ -554,12 +572,19 @@ class RaceEngine:
                     rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
             else:
                 if rival.behavior in {"spin", "big_spin"}:
+                    was_big = rival.behavior == "big_spin"
                     turn = 360.0 / 70.0
                     rival.rotation = ((rival.rotation + turn / 2) % turn) - turn / 2
+                    rival.behavior = "aftermath"
+                    rival.behavior_timer = int(self.fps * (0.68 if was_big else 0.34))
+                    rival.spin_rate *= 0.28
+                    rival.slide_velocity *= 0.44
+                    rival.speed = min(rival.speed, rival.base_speed * (0.13 if was_big else 0.24))
+                elif rival.behavior == "aftermath":
                     rival.behavior = "recover"
-                    rival.behavior_timer = int(self.fps * 0.55)
-                    rival.spin_rate *= 0.40
-                    rival.slide_velocity *= 0.50
+                    rival.behavior_timer = int(self.fps * 0.82)
+                    rival.spin_rate *= 0.35
+                    rival.slide_velocity *= 0.48
                 elif rival.behavior == "recover":
                     rival.behavior = "normal"
                     rival.rotation = 0.0
@@ -583,7 +608,7 @@ class RaceEngine:
                 rival.target_lane = self.rng.choice([-0.64, -0.32, 0.0, 0.32, 0.64])
                 rival.change_timer = self.rng.randint(int(self.fps * 0.8), int(self.fps * 2.3))
 
-            if rival.behavior not in {"spin", "big_spin", "recover"}:
+            if rival.behavior not in {"spin", "big_spin", "aftermath", "recover"}:
                 lane_delta = rival.target_lane - rival.lane
                 rival.heading = max(-0.18, min(0.18, lane_delta * 0.30))
                 rival.lane += lane_delta * (0.022 + 0.020 * min(1.0, rival.speed))
@@ -599,7 +624,7 @@ class RaceEngine:
         if t > self.duration - 5.0:
             survivors = [
                 r for r in self.rivals
-                if r.active and r.behavior not in {"spin", "big_spin", "recover"}
+                if r.active and r.behavior not in {"spin", "big_spin", "aftermath", "recover"}
             ]
             survivors.sort(key=lambda r: abs(r.z - 1.0))
             for rival in survivors[:3]:
@@ -678,14 +703,26 @@ class RaceEngine:
             self.player.lane = max(-0.82, min(0.82, self.player.lane))
             shake = max(shake, min(0.38, max(0.0, self.player.crash_timer / 85.0)))
             if self.player.crash_timer <= 0:
-                self.player.crashed = False
-                self.player.lane *= 0.65
-                self.player.speed = max(0.30, self.player.speed)
-                self.player.crash_rotation = 0.0
-                self.player.crash_spin_rate = 0.0
-                self.player.crash_slide_velocity = 0.0
-                event = "RED'S BACK!"
-                self.last_event = i
+                if self.player.crash_recovery_timer <= 0:
+                    self.player.crash_recovery_timer = int(self.fps * 0.82)
+                    self.player.speed = min(self.player.speed, 0.18)
+                    self.player.crash_spin_rate *= 0.30
+                    self.player.crash_slide_velocity *= 0.45
+                self.player.crash_recovery_timer -= 1
+                self.player.crash_rotation *= 0.84
+                self.player.crash_spin_rate *= 0.52
+                self.player.crash_slide_velocity *= 0.72
+                self.player.speed += (0.24 - self.player.speed) * 0.055
+                if self.player.crash_recovery_timer <= 0:
+                    self.player.crashed = False
+                    self.player.lane *= 0.72
+                    self.player.speed = max(0.24, self.player.speed)
+                    self.player.crash_rotation = 0.0
+                    self.player.crash_spin_rate = 0.0
+                    self.player.crash_slide_velocity = 0.0
+                    self.player.crash_recovery_timer = 0
+                    event = "RED'S BACK!"
+                    self.last_event = i
         else:
             self.player.lane += correction + self.player.drift_slip
             self.player.heading = max(-0.22, min(0.22, correction * 6.5))

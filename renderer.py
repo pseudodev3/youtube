@@ -201,10 +201,10 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 7.0
             contact_angle=rival.contact_side*rival.contact_strength*amp*math.sin(frame.t*44.0)
 
-        if rival.behavior in {"spin","big_spin","recover"} or abs(rival.rotation)>.10:
+        if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:
             _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
             d=ImageDraw.Draw(img,"RGBA")
-            smoke_count=16 if rival.behavior=="big_spin" else 7
+            smoke_count=16 if rival.behavior=="big_spin" else 10 if rival.behavior=="aftermath" else 7
             for _ in range(smoke_count):
                 rr=rng.uniform(6,19)*scale; sx=x+rng.uniform(-42,42)*scale; sy=y+rng.uniform(28,110)*scale
                 alpha=rng.randint(40,105) if rival.behavior=="big_spin" else rng.randint(35,90)
