@@ -178,12 +178,17 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         if rival.contact_timer>0:
             contact_angle=rival.contact_side*rival.contact_strength*6.0*math.sin(frame.t*44.0)
 
-        if rival.behavior=="spin" or abs(rival.rotation)>.10:
+        if rival.behavior in {"spin","big_spin","recover"} or abs(rival.rotation)>.10:
             _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
             d=ImageDraw.Draw(img,"RGBA")
-            for _ in range(7):
-                rr=rng.uniform(6,17)*scale; sx=x+rng.uniform(-32,32)*scale; sy=y+rng.uniform(30,92)*scale
-                d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,90)))
+            smoke_count=16 if rival.behavior=="big_spin" else 7
+            for _ in range(smoke_count):
+                rr=rng.uniform(6,19)*scale; sx=x+rng.uniform(-42,42)*scale; sy=y+rng.uniform(28,110)*scale
+                alpha=rng.randint(40,105) if rival.behavior=="big_spin" else rng.randint(35,90)
+                d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,alpha))
+            if rival.behavior=="big_spin":
+                d.line([(x-38*scale,y+55*scale),(x-rival.slide_velocity*9000,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
+                d.line([(x+38*scale,y+55*scale),(x-rival.slide_velocity*9000+76*scale,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
         elif rival.contact_timer>0:
             _rotated_car(img,x,y,scale,contact_angle,False,rival.color)
             d=ImageDraw.Draw(img,"RGBA")
@@ -232,7 +237,12 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     if frame.player.contact_timer>0:
         player_contact_angle=frame.player.contact_side*frame.player.contact_strength*7.0*math.sin(frame.t*42.0)
 
-    if frame.player.drifting and abs(frame.player.drift_angle)>.08:
+    if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
+        _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        for _ in range(14):
+            rr=rng.uniform(10,26); sx=px+rng.uniform(-65,65); sy=py+rng.uniform(45,155)
+            d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,90)))
+    elif frame.player.drifting and abs(frame.player.drift_angle)>.08:
         _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
     elif frame.player.contact_timer>0:
         _rotated_car(img,px,py,1.15,player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
