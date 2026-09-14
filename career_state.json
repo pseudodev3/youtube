@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "episode": 18,
+  "driver_skill": 0.646,
+  "road_tier": 4,
+  "car_tier": 4,
+  "wins": 11,
+  "crashes": 6,
+  "uploads": 0,
+  "unlocked_roads": [
+    "training",
+    "country",
+    "mountain",
+    "night_city"
+  ],
+  "last_track": "night_city",
+  "last_story": null,
+  "last_result": null,
+  "last_featured_rival": null,
+  "last_video_id": null,
+  "rivals": {
+    "BLUE": {"rivalry": 3, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": 9, "last_result": null},
+    "GREEN": {"rivalry": 1, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null},
+    "ORANGE": {"rivalry": 2, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null},
+    "PURPLE": {"rivalry": 2, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null},
+    "WHITE": {"rivalry": 1, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null},
+    "CYAN": {"rivalry": 1, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null},
+    "LIME": {"rivalry": 1, "wins_over_red": 0, "losses_to_red": 0, "incidents": 0, "last_featured_episode": -999, "last_result": null}
+  },
+  "history": []
+}
