@@ -157,7 +157,8 @@ def synthesize_audio(
                 age = max(0.0, (n - impact_start) / sample_rate)
                 impact_env = max(0.0, 1.0 - age / max(0.001, (impact_until - impact_start) / sample_rate))
             commentary_duck = 0.78 if event else 1.0
-            music_gain = energy * sidechain * commentary_duck * (1.0 - 0.74 * impact_env)
+            # Slight +1 dB-ish lift after launch testing; ducks still keep commentary and impacts clear.
+            music_gain = 1.12 * energy * sidechain * commentary_duck * (1.0 - 0.74 * impact_env)
             music_l = (kick + snare + hat + bass + arp_l + pad) * music_gain
             music_r = (kick + snare + hat + bass + arp_r + pad) * music_gain
 
