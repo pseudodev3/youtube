@@ -1,14 +1,11 @@
 {
-  "episode": 18,
-  "driver_skill": 0.646,
-  "road_tier": 4,
-  "car_tier": 4,
-  "wins": 11,
-  "crashes": 6,
+  "episode": 1,
+  "driver_skill": 0.2,
+  "road_tier": 1,
+  "car_tier": 2,
+  "wins": 0,
+  "crashes": 0,
   "unlocked_roads": [
-    "training",
-    "country",
-    "mountain",
-    "night_city"
+    "training"
   ]
 }
