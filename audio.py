@@ -18,15 +18,16 @@ def synthesize_audio(
     impact_strengths: list[float],
     impact_sides: list[float],
     events: list[str | None],
+    music_states: list[str],
     fps: int,
     sample_rate: int = 22050,
     seed: int = 0,
 ):
-    """Build an original arcade/F1-style soundtrack from race telemetry.
+    """Build an original adaptive racing soundtrack entirely in code.
 
-    Everything is synthesized locally with the stdlib: engine, wind, tyres,
-    impacts/debris and a fast electronic music bed. Music ducks under big hits
-    and commentary beats so the race action stays in front.
+    Engine, wind, tyres and impacts come from race telemetry. The music moves
+    between calm/build/battle/danger/recovery/finale states from the showrunner,
+    then ducks under commentary and hard impacts so the race always stays readable.
     """
     duration = len(speeds) / fps
     total_samples = int(duration * sample_rate)
@@ -44,11 +45,18 @@ def synthesize_audio(
 
     bpm = 154.0
     beat_hz = bpm / 60.0
-    # D-minor-ish loop; deliberately simple and reusable without samples.
     bass_notes = [38, 38, 41, 38, 34, 34, 36, 33]
     arp_notes = [62, 65, 69, 65, 60, 65, 69, 72, 58, 62, 65, 69, 60, 64, 67, 72]
+    energies = {
+        "calm": 0.42,
+        "build": 0.68,
+        "battle": 1.00,
+        "danger": 0.84,
+        "recovery": 0.50,
+        "finale": 1.10,
+    }
 
-    with wave.open(str(path), 'wb') as wf:
+    with wave.open(str(path), "wb") as wf:
         wf.setnchannels(2)
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
@@ -62,8 +70,12 @@ def synthesize_audio(
             strength = max(0.0, min(1.0, impact_strengths[fi]))
             side = max(-1.0, min(1.0, impact_sides[fi]))
             event = events[fi]
+            state = music_states[fi] if fi < len(music_states) else "battle"
+            energy = energies.get(state, 0.75)
 
-            major_event = bool(event and any(k in event.upper() for k in ('CRASH', 'PILEUP', 'HUGE HIT', 'FULL SPIN', 'BIG CONTACT')))
+            major_event = bool(event and any(k in event.upper() for k in (
+                "CRASH", "PILEUP", "HUGE HIT", "FULL SPIN", "BIG CONTACT"
+            )))
             new_event_hit = major_event and event != prev_event
             new_impact = strength >= 0.48 and (prev_impact < 0.43 or strength > prev_impact + 0.16)
             if (crashed and not prev_crash) or new_impact or new_event_hit:
@@ -75,7 +87,7 @@ def synthesize_audio(
             prev_impact = strength
             prev_event = event
 
-            # Formula-ish engine: layered harmonics whose pitch follows race speed.
+            # Formula-ish engine whose pitch follows rendered speed.
             rpm = 115.0 + speed * 420.0
             phase1 += math.tau * rpm / sample_rate
             phase2 += math.tau * rpm * 1.98 / sample_rate
@@ -90,7 +102,7 @@ def synthesize_audio(
             wind_noise = rng.uniform(-1.0, 1.0)
             wind = wind_noise * (0.018 + 0.080 * speed * speed)
 
-            # --- Original fast electronic music bed ---
+            # Original electronic music bed. State changes alter density, not just volume.
             beat = t * beat_hz
             beat_frac = beat % 1.0
             half_step = int(beat * 2.0)
@@ -98,18 +110,18 @@ def synthesize_audio(
             sixteenth = int(beat * 4.0)
             sixteenth_frac = (beat * 4.0) % 1.0
 
-            # Kick on each beat, with a short pitch-drop body.
             kick_env = math.exp(-beat_frac * 15.0)
-            kick = math.sin(math.tau * (54.0 + 56.0 * math.exp(-beat_frac * 22.0)) * t) * kick_env * 0.25
+            kick_density = 0.50 if state == "calm" else 0.70 if state == "recovery" else 1.0
+            kick = math.sin(math.tau * (54.0 + 56.0 * math.exp(-beat_frac * 22.0)) * t) * kick_env * 0.25 * kick_density
 
-            # Snare/clap on 2 and 4.
             beat_index = int(beat) % 4
-            snare_env = math.exp(-beat_frac * 19.0) if beat_index in (1, 3) else 0.0
+            snare_on = beat_index in (1, 3) and state not in {"calm", "recovery"}
+            snare_env = math.exp(-beat_frac * 19.0) if snare_on else 0.0
             snare = rng.uniform(-1.0, 1.0) * snare_env * 0.10
 
-            # Bright eighth-note hats; noise differentiated by a fast sine gate.
+            hat_density = 0.28 if state == "calm" else 0.42 if state == "recovery" else 1.0
             hat_env = math.exp(-eighth_frac * 28.0)
-            hat = rng.uniform(-1.0, 1.0) * hat_env * 0.035
+            hat = rng.uniform(-1.0, 1.0) * hat_env * 0.035 * hat_density
 
             bass_note = bass_notes[(half_step // 2) % len(bass_notes)]
             bass_freq = _midi(bass_note)
@@ -122,27 +134,34 @@ def synthesize_audio(
             arp_phase_l += math.tau * arp_freq / sample_rate
             arp_phase_r += math.tau * (arp_freq * 1.003) / sample_rate
             arp_env = math.exp(-sixteenth_frac * 5.0)
-            arp_l = math.sin(arp_phase_l) * arp_env * 0.045
-            arp_r = math.sin(arp_phase_r + 0.32) * arp_env * 0.045
+            arp_density = 0.20 if state == "calm" else 0.35 if state == "recovery" else 0.72 if state == "build" else 1.0
+            arp_l = math.sin(arp_phase_l) * arp_env * 0.045 * arp_density
+            arp_r = math.sin(arp_phase_r + 0.32) * arp_env * 0.045 * arp_density
 
             pad = (
                 math.sin(math.tau * _midi(50) * t) * 0.020
                 + math.sin(math.tau * _midi(53) * t + 0.5) * 0.016
                 + math.sin(math.tau * _midi(57) * t + 1.0) * 0.014
             )
+            if state == "danger":
+                pad *= 0.45
+                bass *= 1.12
+            elif state == "finale":
+                bass *= 1.12
+                arp_l *= 1.10
+                arp_r *= 1.10
 
-            # Sidechain the bed around the kick, and duck it hard around impacts.
             sidechain = 0.72 + 0.28 * (1.0 - kick_env)
             impact_env = 0.0
             if n < impact_until:
                 age = max(0.0, (n - impact_start) / sample_rate)
                 impact_env = max(0.0, 1.0 - age / max(0.001, (impact_until - impact_start) / sample_rate))
-            commentary_duck = 0.82 if event else 1.0
-            music_gain = sidechain * commentary_duck * (1.0 - 0.72 * impact_env)
+            commentary_duck = 0.78 if event else 1.0
+            music_gain = energy * sidechain * commentary_duck * (1.0 - 0.74 * impact_env)
             music_l = (kick + snare + hat + bass + arp_l + pad) * music_gain
             music_r = (kick + snare + hat + bass + arp_r + pad) * music_gain
 
-            # --- Impact stack: low thud + carbon crack + debris + tyre scrub ---
+            # Impact stack: thud + carbon crack + debris + tyre scrub.
             impact_l = impact_r = 0.0
             if n < impact_until:
                 age = max(0.0, (n - impact_start) / sample_rate)
@@ -159,7 +178,6 @@ def synthesize_audio(
                 impact_l = hit * (1.0 - pan)
                 impact_r = hit * (1.0 + pan)
 
-            # Occasional tyre squeal, kept behind music/engine.
             squeal = 0.0
             if speed > 0.58 and math.sin(t * 2.35) > 0.965:
                 squeal = math.sin(math.tau * 1450.0 * t) * 0.040
@@ -167,17 +185,15 @@ def synthesize_audio(
             engine_mix = engine * (0.78 if impact_env > 0.15 else 1.0)
             left_sample = engine_mix + wind + squeal + music_l + impact_l
             right_sample = engine_mix + wind + squeal + music_r + impact_r
-
-            # Small wind stereo spread.
             left_sample += wind_noise * 0.016
             right_sample -= wind_noise * 0.016
 
-            # Soft saturation with enough headroom for AAC/intersample peaks.
+            # Headroom for phone speakers + AAC intersample peaks.
             left_sample = math.tanh(left_sample * 1.18) * 0.75
             right_sample = math.tanh(right_sample * 1.18) * 0.75
             left = int(max(-1.0, min(1.0, left_sample)) * 32767)
             right = int(max(-1.0, min(1.0, right_sample)) * 32767)
-            frames += struct.pack('<hh', left, right)
+            frames += struct.pack("<hh", left, right)
 
             if len(frames) >= 65536:
                 wf.writeframesraw(frames)
