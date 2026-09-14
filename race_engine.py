@@ -97,6 +97,8 @@ class RaceEngine:
         self.phase = self.rng.uniform(0, math.tau)
         self.last_event = -999
         self.last_drift = -999
+        self.crash_chain_hits = 0
+        self.crash_chain_until = -999
 
         self.target_position = 5 if self.skill < .34 else 4 if self.skill < .58 else 3
         self.featured_index = seed % len(self.DRIVER_CAST)
@@ -281,6 +283,59 @@ class RaceEngine:
             return fallback
         return 1.0 if b_lane > a_lane else -1.0
 
+    def _record_crash_chain(self, i: int, strength: float) -> str | None:
+        """Track connected hard hits so a second impact reads as a pileup."""
+        if strength < 0.72:
+            return None
+        if i > self.crash_chain_until:
+            self.crash_chain_hits = 0
+        self.crash_chain_hits += 1
+        self.crash_chain_until = i + int(self.fps * 0.85)
+        if self.crash_chain_hits == 2:
+            self.last_event = i
+            return "PILEUP! 😭"
+        return None
+
+    def _react_to_crash_hazards(self, i: int) -> None:
+        """Make following cars react to a crashed car instead of spawning spins."""
+        hazards = [
+            r for r in self.rivals
+            if r.active and r.behavior in {"spin", "big_spin", "aftermath", "recover"}
+        ]
+        if not hazards:
+            return
+
+        for driver in self.rivals:
+            if not driver.active or driver in hazards or driver.behavior != "normal":
+                continue
+            candidates = []
+            for hazard in hazards:
+                gap = driver.z - hazard.z
+                lateral = abs(driver.lane - hazard.lane)
+                if 0.018 < gap < 0.17 and lateral < 0.34:
+                    candidates.append((gap, lateral, hazard))
+            if not candidates:
+                continue
+
+            gap, lateral, hazard = min(candidates, key=lambda x: x[0])
+            reckless = driver.personality in {"chaos", "divebomb", "showboat"}
+            fail_chance = 0.16 + (0.30 if gap < 0.080 else 0.0) + (0.18 if reckless else 0.0)
+
+            if self.rng.random() < fail_chance:
+                driver.behavior = "late_react"
+                driver.behavior_timer = int(self.fps * 0.38)
+                driver.target_lane = driver.lane
+                driver.speed *= 0.985
+            else:
+                driver.behavior = "avoid_crash"
+                driver.behavior_timer = int(self.fps * 0.62)
+                escape = -1.0 if hazard.lane >= driver.lane else 1.0
+                driver.target_lane = max(
+                    -0.72,
+                    min(0.72, driver.lane + escape * (0.42 + 0.08 * (1.0 - lateral / 0.34))),
+                )
+                driver.speed *= 0.94
+
     def _resolve_rival_contacts(self, i: int) -> str | None:
         event = None
         active = [r for r in self.rivals if r.active]
@@ -329,11 +384,12 @@ class RaceEngine:
                     speed_keep = 0.992 - strength * 0.010
                     mix = 0.20
                 else:
-                    push = lane_overlap * 0.56 + 0.006
-                    timer = int(self.fps * 0.30)
-                    heading_impulse = 0.045 + strength * 0.080
-                    speed_keep = 0.978 - strength * 0.018
-                    mix = 0.36
+                    # Hard contact gets a clear rebound beat before loss of control.
+                    push = lane_overlap * 0.72 + 0.012
+                    timer = int(self.fps * 0.38)
+                    heading_impulse = 0.070 + strength * 0.105
+                    speed_keep = 0.952 - strength * 0.026
+                    mix = 0.42
 
                 a.lane = max(-0.80, min(0.80, a.lane - side_a * push))
                 b.lane = max(-0.80, min(0.80, b.lane - side_b * push))
@@ -354,6 +410,16 @@ class RaceEngine:
                 b.speed += (mean_speed - b.speed) * mix
                 a.speed *= speed_keep
                 b.speed *= speed_keep
+
+                if strength >= 0.82:
+                    rebound = 0.005 + 0.006 * strength
+                    a.lane = max(-0.80, min(0.80, a.lane - side_a * rebound))
+                    b.lane = max(-0.80, min(0.80, b.lane - side_b * rebound))
+                    trailing, leading = (a, b) if a.z > b.z else (b, a)
+                    trailing.speed *= 0.84
+                    leading.speed = min(0.99, leading.speed * (1.025 + 0.012 * strength))
+                    trailing.z += 0.008 * strength
+                    leading.z -= 0.006 * strength
 
                 if strength > 0.90:
                     # A real crash affects both cars. One gets the dramatic full spin;
@@ -377,6 +443,10 @@ class RaceEngine:
                         event = "RUBBING WHEELS"
                     if event:
                         self.last_event = i
+
+                chain_event = self._record_crash_chain(i, strength)
+                if chain_event:
+                    event = chain_event
         return event
 
     def _resolve_player_contacts(self, i: int) -> str | None:
@@ -421,11 +491,11 @@ class RaceEngine:
                 player_keep = 0.991 - strength * 0.011
                 rival_keep = 0.992 - strength * 0.010
             else:
-                push = lane_overlap * 0.57 + 0.007
-                timer = int(self.fps * 0.30)
-                heading_impulse = 0.050 + strength * 0.085
-                player_keep = 0.976 - strength * 0.020
-                rival_keep = 0.978 - strength * 0.018
+                push = lane_overlap * 0.74 + 0.012
+                timer = int(self.fps * 0.38)
+                heading_impulse = 0.075 + strength * 0.110
+                player_keep = 0.948 - strength * 0.028
+                rival_keep = 0.952 - strength * 0.025
 
             self.player.lane = max(-0.80, min(0.80, self.player.lane - side_red * push))
             rival.lane = max(-0.80, min(0.80, rival.lane - side_rival * push))
@@ -444,6 +514,19 @@ class RaceEngine:
             rival.heading -= side_rival * heading_impulse
             self.player.speed *= player_keep
             rival.speed *= rival_keep
+
+            if strength >= 0.84:
+                rebound = 0.006 + 0.006 * strength
+                self.player.lane = max(-0.80, min(0.80, self.player.lane - side_red * rebound))
+                rival.lane = max(-0.80, min(0.80, rival.lane - side_rival * rebound))
+                if rival.z < player_z:
+                    self.player.speed *= 0.83
+                    rival.speed = min(0.99, rival.speed * (1.03 + 0.01 * strength))
+                    rival.z -= 0.008 * strength
+                else:
+                    rival.speed *= 0.83
+                    self.player.speed = min(0.99, self.player.speed * (1.025 + 0.01 * strength))
+                    rival.z += 0.008 * strength
 
             if strength > 0.93:
                 # Heavy Red-vs-rival contact has consequences for BOTH cars.
@@ -466,6 +549,10 @@ class RaceEngine:
                     event = f"RED RUBS {rival.name}'S WHEEL"
                 if event:
                     self.last_event = i
+
+            chain_event = self._record_crash_chain(i, strength)
+            if chain_event:
+                event = chain_event
         return event
 
     def frame(self, i: int) -> RaceFrame:
@@ -478,6 +565,9 @@ class RaceEngine:
 
         if self.player.contact_timer > 0:
             self.player.contact_timer -= 1
+            if self.player.contact_strength >= 0.82 and not self.player.crashed:
+                self.player.lane -= self.player.contact_side * (0.0018 + 0.0028 * self.player.contact_strength)
+                self.player.lane = max(-0.82, min(0.82, self.player.lane))
         else:
             self.player.contact_strength *= 0.80
 
@@ -492,6 +582,9 @@ class RaceEngine:
             prev_z = rival.z
             if rival.contact_timer > 0:
                 rival.contact_timer -= 1
+                if rival.contact_strength >= 0.82 and rival.behavior not in {"spin", "big_spin", "aftermath", "recover"}:
+                    rival.lane -= rival.contact_side * (0.0018 + 0.0028 * rival.contact_strength)
+                    rival.lane = max(-0.82, min(0.82, rival.lane))
             else:
                 rival.contact_strength *= 0.80
 
@@ -570,6 +663,11 @@ class RaceEngine:
                 elif rival.behavior == "divebomb":
                     rival.speed += (min(0.99, rival.base_speed + 0.24) - rival.speed) * 0.17
                     rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
+                elif rival.behavior == "avoid_crash":
+                    rival.speed += (rival.base_speed * 0.68 - rival.speed) * 0.15
+                elif rival.behavior == "late_react":
+                    rival.speed += (rival.base_speed * 0.90 - rival.speed) * 0.08
+                    rival.heading += math.sin(i * 0.41) * 0.012
             else:
                 if rival.behavior in {"spin", "big_spin"}:
                     was_big = rival.behavior == "big_spin"
@@ -621,6 +719,8 @@ class RaceEngine:
                 event = f"{rival.name} GETS RED!"
                 self.last_event = i
 
+        self._react_to_crash_hazards(i)
+
         if t > self.duration - 5.0:
             survivors = [
                 r for r in self.rivals
@@ -635,7 +735,8 @@ class RaceEngine:
         rival_contact_event = self._resolve_rival_contacts(i)
         if rival_contact_event:
             event = rival_contact_event
-            shake = max(shake, 0.12)
+            peak_contact = max((r.contact_strength for r in self.rivals if r.contact_timer > 0), default=0.0)
+            shake = max(shake, 0.10 + 0.10 * peak_contact)
 
         lookahead = 0.38 + 0.80 * self.skill
         base_target = self._curve(t + lookahead) * 0.35

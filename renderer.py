@@ -110,9 +110,9 @@ def _draw_contact_sparks(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y
         return
     sx = x + side * 54 * scale
     sy = y + 10 * scale
-    count = max(3, int(3 + (strength - 0.45) * 13))
+    count = max(3, int(4 + (strength - 0.45) * 17))
     for _ in range(count):
-        length = rng.uniform(10, 36) * scale * (0.65 + strength)
+        length = rng.uniform(10, 42) * scale * (0.65 + strength)
         angle = rng.uniform(-0.70, 0.70) + (0 if side > 0 else math.pi)
         ex = sx + math.cos(angle) * length
         ey = sy + math.sin(angle) * length + rng.uniform(4, 18) * scale
@@ -133,6 +133,22 @@ def _draw_tire_scrub(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: fl
         ox=rng.uniform(-8,8)*scale
         oy=rng.uniform(0,18)*scale
         d.ellipse([sx+ox-rr,sy+oy-rr,sx+ox+rr,sy+oy+rr],fill=(205,210,215,45))
+
+def _draw_impact_debris(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: float,
+                        scale: float, side: float, strength: float):
+    if strength < 0.82:
+        return
+    sx = x + side * 52 * scale
+    sy = y + 12 * scale
+    for _ in range(4 + int(strength * 5)):
+        dist = rng.uniform(18, 72) * scale
+        angle = rng.uniform(-1.0, 1.0) + (0 if side > 0 else math.pi)
+        cx = sx + math.cos(angle) * dist
+        cy = sy + math.sin(angle) * dist + rng.uniform(5, 28) * scale
+        r = rng.uniform(2.5, 6.0) * scale
+        shade = rng.choice([(24,25,28,230),(55,58,62,220),(255,185,70,230)])
+        d.polygon([(cx-r,cy-r*.4),(cx+r,cy),(cx-r*.3,cy+r)],fill=shade)
+
 
 def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
@@ -198,7 +214,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
         contact_angle=0.0
         if rival.contact_timer>0:
-            amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 7.0
+            amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 10.0
             contact_angle=rival.contact_side*rival.contact_strength*amp*math.sin(frame.t*44.0)
 
         if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:
@@ -221,6 +237,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         if rival.contact_timer>0:
             _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+            _draw_impact_debris(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
 
         if rival.behavior in {"panic","brake_check"}:
             s=scale
@@ -259,7 +276,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     player_contact_angle=0.0
     if frame.player.contact_timer>0:
-        amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 7.5
+        amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 10.5
         player_contact_angle=frame.player.contact_side*frame.player.contact_strength*amp*math.sin(frame.t*42.0)
 
     if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
@@ -277,6 +294,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     if frame.player.contact_timer>0:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
         _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+        _draw_impact_debris(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
 
     # Compact race strip: readable when glanced at, quiet when watching the action.
     d.rounded_rectangle([56,54,W-56,180],radius=28,fill=(9,14,21,148),outline=(255,255,255,28),width=2)
