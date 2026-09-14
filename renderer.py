@@ -22,11 +22,20 @@ def _font(size: int, bold: bool = False):
 
 
 RIVAL_PALETTES = [
+    # BLUE
     ((44,117,226,255),(91,164,255,255),(18,51,111,255),(148,213,255,255)),
+    # GREEN
     ((36,184,106,255),(92,224,151,255),(15,92,55,255),(184,255,211,255)),
+    # ORANGE
     ((245,158,40,255),(255,199,92,255),(137,78,15,255),(255,232,160,255)),
+    # PURPLE
     ((155,89,230,255),(199,150,255,255),(78,38,130,255),(229,205,255,255)),
+    # WHITE
     ((235,235,240,255),(255,255,255,255),(105,108,118,255),(111,211,255,255)),
+    # CYAN — intentionally different from BLUE
+    ((31,190,205,255),(95,232,238,255),(12,94,107,255),(218,255,255,255)),
+    # LIME — intentionally different from GREEN
+    ((166,214,54,255),(211,245,92,255),(78,112,18,255),(244,255,188,255)),
 ]
 
 
@@ -269,16 +278,22 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
         _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
 
-    d.rounded_rectangle([48,52,W-48,264],radius=34,fill=(9,14,21,188),outline=(255,255,255,45),width=2)
-    f1=_font(54,True); f2=_font(34,True); fpos=_font(42,True); small=_font(27,True)
-    d.text((82,76),f"EP. {episode:03d}",font=f1,fill=(255,255,255,255))
-    d.text((82,145),f"TARGET P{frame.target_position}",font=f2,fill=(255,224,126,255))
-    d.text((W-330,78),f"{int(frame.player.speed*310):03d} KM/H",font=f2,fill=(255,224,126,255))
-    d.text((W-245,142),f"P{frame.position}/{frame.total_cars}",font=fpos,fill=(255,255,255,255))
-    d.text((82,198),f"RIVAL: {frame.featured_rival}",font=small,fill=(225,231,238,235))
-    bx0,by0,bx1,by1=82,239,W-82,252
-    d.rounded_rectangle([bx0,by0,bx1,by1],radius=7,fill=(255,255,255,42))
-    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*frame.race_progress,by1],radius=7,fill=(255,213,90,245))
+    # Compact race strip: readable when glanced at, quiet when watching the action.
+    d.rounded_rectangle([56,54,W-56,180],radius=28,fill=(9,14,21,148),outline=(255,255,255,28),width=2)
+    f1=_font(54,True)
+    hud_pos=_font(42,True); hud_meta=_font(25,True); hud_small=_font(21,True)
+    d.text((82,72),f"P{frame.position}/{frame.total_cars}",font=hud_pos,fill=(255,255,255,248))
+    d.text((238,82),f"TARGET P{frame.target_position}",font=hud_meta,fill=(255,224,126,240))
+    speed_text=f"{int(frame.player.speed*310):03d} KM/H"
+    sb=d.textbbox((0,0),speed_text,font=hud_meta); sw=sb[2]-sb[0]
+    d.text((W-82-sw,82),speed_text,font=hud_meta,fill=(255,224,126,232))
+    d.text((82,128),f"RIVAL {frame.featured_rival}",font=hud_small,fill=(225,231,238,215))
+    ep_text=f"EP {episode:03d}"
+    eb=d.textbbox((0,0),ep_text,font=hud_small); ew=eb[2]-eb[0]
+    d.text((W-82-ew,128),ep_text,font=hud_small,fill=(225,231,238,160))
+    bx0,by0,bx1,by1=82,160,W-82,167
+    d.rounded_rectangle([bx0,by0,bx1,by1],radius=4,fill=(255,255,255,28))
+    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*frame.race_progress,by1],radius=4,fill=(255,213,90,215))
 
     if frame.event_text:
         text=frame.event_text; box=d.textbbox((0,0),text,font=f1); tw=box[2]-box[0]
@@ -313,8 +328,10 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         d.text((W/2-(bb[2]-bb[0])/2,1745),unlock,font=uf,fill=(218,225,234,235))
     else:
         label="BEGINNER" if skill<.28 else "GETTING GOOD" if skill<.58 else "PRO"
-        d.rounded_rectangle([60,1740,W-60,1850],radius=30,fill=(8,10,14,205))
-        bb=d.textbbox((0,0),label,font=f1); d.text((W/2-(bb[2]-bb[0])/2,1766),label,font=f1,fill=(255,255,255,255))
+        statusf=_font(28,True)
+        bb=d.textbbox((0,0),label,font=statusf); tw=bb[2]-bb[0]
+        d.rounded_rectangle([W/2-tw/2-28,1786,W/2+tw/2+28,1840],radius=22,fill=(8,10,14,145),outline=(255,255,255,22),width=1)
+        d.text((W/2-tw/2,1797),label,font=statusf,fill=(255,255,255,218))
 
     if frame.shake>.2:
         overlay=Image.new("RGBA",(W,H),(255,255,255,int(16*min(1.0,frame.shake))))

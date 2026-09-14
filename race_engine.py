@@ -130,7 +130,7 @@ class RaceEngine:
                 target_lane=lane,
                 heading=0.0,
                 rotation=0.0,
-                color=n % 5,
+                color=n,
                 change_timer=self.rng.randint(int(fps * 0.8), int(fps * 2.3)),
                 name=name,
                 personality=personality,
