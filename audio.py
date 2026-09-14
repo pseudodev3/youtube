@@ -172,9 +172,9 @@ def synthesize_audio(
             left_sample += wind_noise * 0.016
             right_sample -= wind_noise * 0.016
 
-            # Soft-ish saturation and clamp.
-            left_sample = math.tanh(left_sample * 1.18) * 0.92
-            right_sample = math.tanh(right_sample * 1.18) * 0.92
+            # Soft saturation with enough headroom for AAC/intersample peaks.
+            left_sample = math.tanh(left_sample * 1.18) * 0.75
+            right_sample = math.tanh(right_sample * 1.18) * 0.75
             left = int(max(-1.0, min(1.0, left_sample)) * 32767)
             right = int(max(-1.0, min(1.0, right_sample)) * 32767)
             frames += struct.pack('<hh', left, right)
