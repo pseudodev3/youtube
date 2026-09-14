@@ -298,52 +298,78 @@ class RaceEngine:
                 side_b = -side_a
                 lane_overlap = car_width - dl
                 z_overlap = car_len - dz
+                fresh_contact = a.contact_timer <= 0 or b.contact_timer <= 0
 
-                push = lane_overlap * 0.54 + 0.006
-                a.lane = max(-0.80, min(0.80, a.lane - side_a * push))
-                b.lane = max(-0.80, min(0.80, b.lane - side_b * push))
-
-                if a.z <= b.z:
-                    a.z -= z_overlap * 0.28
-                    b.z += z_overlap * 0.28
-                else:
-                    b.z -= z_overlap * 0.28
-                    a.z += z_overlap * 0.28
+                # During an existing rub, only keep the bodies separated. Reapplying a
+                # full impulse every frame is what made light contact look jittery.
+                if not fresh_contact:
+                    push = lane_overlap * 0.18 + 0.001
+                    a.lane = max(-0.80, min(0.80, a.lane - side_a * push))
+                    b.lane = max(-0.80, min(0.80, b.lane - side_b * push))
+                    continue
 
                 relative_speed = abs(a.speed - b.speed)
                 reckless = (
-                    a.behavior in {"divebomb", "swerve", "showboat", "spin"}
-                    or b.behavior in {"divebomb", "swerve", "showboat", "spin"}
+                    a.behavior in {"divebomb", "swerve", "showboat", "spin", "big_spin"}
+                    or b.behavior in {"divebomb", "swerve", "showboat", "spin", "big_spin"}
                 )
-                strength = min(1.0, 0.28 + relative_speed * 3.2 + (0.28 if reckless else 0.0))
+                strength = min(1.0, 0.14 + relative_speed * 2.6 + (0.25 if reckless else 0.0))
 
-                a.contact_timer = b.contact_timer = max(a.contact_timer, int(self.fps * 0.24))
+                if strength < 0.48:
+                    push = lane_overlap * 0.30 + 0.002
+                    timer = int(self.fps * 0.12)
+                    heading_impulse = 0.012 + strength * 0.025
+                    speed_keep = 0.998 - strength * 0.004
+                    mix = 0.08
+                elif strength < 0.82:
+                    push = lane_overlap * 0.44 + 0.004
+                    timer = int(self.fps * 0.20)
+                    heading_impulse = 0.026 + strength * 0.050
+                    speed_keep = 0.992 - strength * 0.010
+                    mix = 0.20
+                else:
+                    push = lane_overlap * 0.56 + 0.006
+                    timer = int(self.fps * 0.30)
+                    heading_impulse = 0.045 + strength * 0.080
+                    speed_keep = 0.978 - strength * 0.018
+                    mix = 0.36
+
+                a.lane = max(-0.80, min(0.80, a.lane - side_a * push))
+                b.lane = max(-0.80, min(0.80, b.lane - side_b * push))
+                if a.z <= b.z:
+                    a.z -= z_overlap * 0.20
+                    b.z += z_overlap * 0.20
+                else:
+                    b.z -= z_overlap * 0.20
+                    a.z += z_overlap * 0.20
+
+                a.contact_timer = b.contact_timer = timer
                 a.contact_side, b.contact_side = side_a, side_b
                 a.contact_strength = b.contact_strength = strength
-                a.heading -= side_a * (0.05 + strength * 0.07)
-                b.heading -= side_b * (0.05 + strength * 0.07)
-
+                a.heading -= side_a * heading_impulse
+                b.heading -= side_b * heading_impulse
                 mean_speed = (a.speed + b.speed) * 0.5
-                a.speed += (mean_speed - a.speed) * (0.30 + strength * 0.20)
-                b.speed += (mean_speed - b.speed) * (0.30 + strength * 0.20)
-                a.speed *= 0.985 - strength * 0.018
-                b.speed *= 0.985 - strength * 0.018
+                a.speed += (mean_speed - a.speed) * mix
+                b.speed += (mean_speed - b.speed) * mix
+                a.speed *= speed_keep
+                b.speed *= speed_keep
 
-                if strength > 0.88:
+                if strength > 0.90:
                     victim = a if self.rng.random() < 0.5 else b
-                    self._kick_spin(
-                        victim, direction=victim.contact_side, severity=strength, full_spin=True
-                    )
-                elif strength > 0.67:
+                    self._kick_spin(victim, victim.contact_side, strength, full_spin=True)
+                elif strength > 0.72:
                     victim = a if self.rng.random() < 0.5 else b
-                    self._kick_spin(victim, direction=victim.contact_side, severity=strength)
+                    self._kick_spin(victim, victim.contact_side, strength)
 
-                if i - self.last_event > self.fps * 0.45:
-                    if strength > 0.67:
-                        event = self.rng.choice(["THEY BANG WHEELS!", "CONTACT! 💥", "THAT'S A CRASH!"])
-                    else:
+                if i - self.last_event > self.fps * 0.48:
+                    if strength > 0.90:
+                        event = self.rng.choice(["HUGE HIT! 💥", "FULL SPIN!", "THAT'S A CRASH!"])
+                    elif strength >= 0.48:
                         event = self.rng.choice(["WHEEL TO WHEEL!", "THEY TOUCH!", "NO ROOM!"])
-                    self.last_event = i
+                    elif strength > 0.34 and self.rng.random() < 0.35:
+                        event = "RUBBING WHEELS"
+                    if event:
+                        self.last_event = i
         return event
 
     def _resolve_player_contacts(self, i: int) -> str | None:
@@ -363,53 +389,76 @@ class RaceEngine:
             side_red = self._contact_side(self.player.lane, rival.lane, 1.0 if rival.color % 2 == 0 else -1.0)
             side_rival = -side_red
             lane_overlap = car_width - dl
-            push = lane_overlap * 0.52 + 0.008
+            fresh_contact = self.player.contact_timer <= 0 or rival.contact_timer <= 0
+
+            if not fresh_contact:
+                push = lane_overlap * 0.18 + 0.001
+                self.player.lane = max(-0.80, min(0.80, self.player.lane - side_red * push))
+                rival.lane = max(-0.80, min(0.80, rival.lane - side_rival * push))
+                continue
+
+            relative_speed = abs(self.player.speed - rival.speed)
+            reckless = rival.behavior in {"divebomb", "swerve", "block", "brake_check", "showboat", "big_spin"}
+            strength = min(1.0, 0.15 + relative_speed * 2.8 + (0.28 if reckless else 0.0))
+
+            if strength < 0.48:
+                push = lane_overlap * 0.30 + 0.002
+                timer = int(self.fps * 0.12)
+                heading_impulse = 0.014 + strength * 0.026
+                player_keep = 0.998 - strength * 0.004
+                rival_keep = 0.998 - strength * 0.003
+            elif strength < 0.84:
+                push = lane_overlap * 0.45 + 0.004
+                timer = int(self.fps * 0.21)
+                heading_impulse = 0.030 + strength * 0.055
+                player_keep = 0.991 - strength * 0.011
+                rival_keep = 0.992 - strength * 0.010
+            else:
+                push = lane_overlap * 0.57 + 0.007
+                timer = int(self.fps * 0.30)
+                heading_impulse = 0.050 + strength * 0.085
+                player_keep = 0.976 - strength * 0.020
+                rival_keep = 0.978 - strength * 0.018
+
             self.player.lane = max(-0.80, min(0.80, self.player.lane - side_red * push))
             rival.lane = max(-0.80, min(0.80, rival.lane - side_rival * push))
-
             if rival.z < player_z:
                 rival.z = min(rival.z, player_z - car_len)
             else:
                 rival.z = max(rival.z, player_z + car_len)
 
-            relative_speed = abs(self.player.speed - rival.speed)
-            reckless = rival.behavior in {"divebomb", "swerve", "block", "brake_check", "showboat"}
-            strength = min(1.0, 0.30 + relative_speed * 3.6 + (0.30 if reckless else 0.0))
-
-            self.player.contact_timer = max(self.player.contact_timer, int(self.fps * 0.28))
+            self.player.contact_timer = timer
             self.player.contact_side = side_red
             self.player.contact_strength = strength
-            rival.contact_timer = max(rival.contact_timer, int(self.fps * 0.28))
+            rival.contact_timer = timer
             rival.contact_side = side_rival
             rival.contact_strength = strength
+            self.player.heading -= side_red * heading_impulse
+            rival.heading -= side_rival * heading_impulse
+            self.player.speed *= player_keep
+            rival.speed *= rival_keep
 
-            self.player.heading -= side_red * (0.06 + 0.09 * strength)
-            rival.heading -= side_rival * (0.06 + 0.09 * strength)
-            self.player.speed *= 0.985 - strength * 0.025
-            rival.speed *= 0.985 - strength * 0.020
-
-            if strength > 0.90:
+            if strength > 0.93:
                 if reckless and self.rng.random() < 0.72:
-                    self._kick_spin(
-                        rival, direction=side_rival, severity=strength, full_spin=True
-                    )
+                    self._kick_spin(rival, side_rival, strength, full_spin=True)
                 elif not self.player.crashed:
                     self._kick_player_crash(side_red, strength)
-            elif strength > 0.72:
-                if reckless or self.rng.random() < 0.68:
-                    self._kick_spin(rival, direction=side_rival, severity=strength)
+            elif strength > 0.76:
+                if reckless or self.rng.random() < 0.66:
+                    self._kick_spin(rival, side_rival, strength)
                 elif not self.player.crashed:
                     self.player.crashed = True
                     self.player.crash_timer = self.rng.randint(12, 22)
 
-            if i - self.last_event > self.fps * 0.40:
-                if rival.name == self.featured_rival:
-                    event = f"RED AND {rival.name} MAKE CONTACT!"
-                elif strength > 0.72:
-                    event = self.rng.choice(["RED GETS TAGGED!", "WHEELS TOUCH! 💥", "BIG CONTACT!"])
-                else:
-                    event = self.rng.choice(["WHEEL TO WHEEL!", "RED RUBS WHEELS!", "NO SPACE!"])
-                self.last_event = i
+            if i - self.last_event > self.fps * 0.42:
+                if strength > 0.93:
+                    event = f"RED AND {rival.name} CRASH! 💥" if rival.name == self.featured_rival else "BIG CONTACT! 💥"
+                elif strength >= 0.48:
+                    event = f"RED AND {rival.name} MAKE CONTACT!" if rival.name == self.featured_rival else self.rng.choice(["WHEEL TO WHEEL!", "RED RUBS WHEELS!", "NO SPACE!"])
+                elif rival.name == self.featured_rival and self.rng.random() < 0.40:
+                    event = f"RED RUBS {rival.name}'S WHEEL"
+                if event:
+                    self.last_event = i
         return event
 
     def frame(self, i: int) -> RaceFrame:

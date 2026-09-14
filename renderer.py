@@ -96,21 +96,34 @@ def _rotate_point(x: float,y: float,angle_deg: float)->tuple[float,float]:
 
 def _draw_contact_sparks(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: float,
                          scale: float, side: float, strength: float):
-    if strength <= 0.02:
+    # Sparks belong to meaningful metal/carbon contact, not every tiny wheel rub.
+    if strength < 0.48:
         return
     sx = x + side * 54 * scale
     sy = y + 10 * scale
-    count = max(4, int(5 + strength * 10))
+    count = max(3, int(3 + (strength - 0.45) * 13))
     for _ in range(count):
-        length = rng.uniform(12, 42) * scale * (0.7 + strength)
-        angle = rng.uniform(-0.75, 0.75) + (0 if side > 0 else math.pi)
+        length = rng.uniform(10, 36) * scale * (0.65 + strength)
+        angle = rng.uniform(-0.70, 0.70) + (0 if side > 0 else math.pi)
         ex = sx + math.cos(angle) * length
-        ey = sy + math.sin(angle) * length + rng.uniform(4, 20) * scale
+        ey = sy + math.sin(angle) * length + rng.uniform(4, 18) * scale
         color = rng.choice([(255,230,120,245),(255,167,58,245),(255,248,205,235)])
-        d.line([(sx,sy),(ex,ey)], fill=color, width=max(2,int(3*scale)))
-        rr=max(2,3*scale)
+        d.line([(sx,sy),(ex,ey)], fill=color, width=max(2,int(2.5*scale)))
+        rr=max(2,2.5*scale)
         d.ellipse([ex-rr,ey-rr,ex+rr,ey+rr],fill=color)
 
+
+def _draw_tire_scrub(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: float,
+                     scale: float, side: float, strength: float):
+    if strength <= 0.04 or strength >= 0.48:
+        return
+    sx=x+side*50*scale
+    sy=y+48*scale
+    for _ in range(2 + int(strength*5)):
+        rr=rng.uniform(3,7)*scale
+        ox=rng.uniform(-8,8)*scale
+        oy=rng.uniform(0,18)*scale
+        d.ellipse([sx+ox-rr,sy+oy-rr,sx+ox+rr,sy+oy+rr],fill=(205,210,215,45))
 
 def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
@@ -176,7 +189,8 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
         contact_angle=0.0
         if rival.contact_timer>0:
-            contact_angle=rival.contact_side*rival.contact_strength*6.0*math.sin(frame.t*44.0)
+            amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 7.0
+            contact_angle=rival.contact_side*rival.contact_strength*amp*math.sin(frame.t*44.0)
 
         if rival.behavior in {"spin","big_spin","recover"} or abs(rival.rotation)>.10:
             _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
@@ -197,6 +211,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
         if rival.contact_timer>0:
             _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+            _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
 
         if rival.behavior in {"panic","brake_check"}:
             s=scale
@@ -235,7 +250,8 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     player_contact_angle=0.0
     if frame.player.contact_timer>0:
-        player_contact_angle=frame.player.contact_side*frame.player.contact_strength*7.0*math.sin(frame.t*42.0)
+        amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 7.5
+        player_contact_angle=frame.player.contact_side*frame.player.contact_strength*amp*math.sin(frame.t*42.0)
 
     if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
         _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
@@ -251,6 +267,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     if frame.player.contact_timer>0:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+        _draw_tire_scrub(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
 
     d.rounded_rectangle([48,52,W-48,264],radius=34,fill=(9,14,21,188),outline=(255,255,255,45),width=2)
     f1=_font(54,True); f2=_font(34,True); fpos=_font(42,True); small=_font(27,True)
