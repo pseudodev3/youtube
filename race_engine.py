@@ -39,6 +39,8 @@ class RivalState:
     contact_timer: int = 0
     contact_side: float = 0.0
     contact_strength: float = 0.0
+    spin_rate: float = 0.0
+    slide_velocity: float = 0.0
 
 
 @dataclass
@@ -183,6 +185,28 @@ class RaceEngine:
         visible.sort(key=lambda r: abs(r.z - 0.88))
         return self.rng.choice(visible[: min(4, len(visible))])
 
+    def _kick_spin(self, rival: RivalState, direction: float | None = None, severity: float = 0.8):
+        """Start a loss-of-control slide without allowing backwards-driving visuals.
+
+        Rotation is capped below 90 degrees. The car loses most of its forward pace,
+        slides laterally, then enters a recovery phase before normal acceleration resumes.
+        """
+        if direction is None or abs(direction) < 0.1:
+            direction = self.rng.choice([-1.0, 1.0])
+        direction = 1.0 if direction > 0 else -1.0
+        severity = max(0.2, min(1.0, severity))
+
+        rival.behavior = "spin"
+        rival.behavior_timer = max(
+            rival.behavior_timer,
+            int(self.fps * (0.78 + 0.34 * severity)),
+        )
+        rival.spin_rate = direction * (0.050 + 0.020 * severity)
+        rival.slide_velocity = direction * (0.007 + 0.006 * severity)
+        rival.rotation += direction * (0.08 + 0.08 * severity)
+        rival.rotation = max(-1.05, min(1.05, rival.rotation))
+        rival.target_lane = rival.lane
+
     def _start_incident(self, rival: RivalState, i: int) -> str:
         choices = {
             "blocker": ["block", "brake_check", "swerve"],
@@ -193,8 +217,12 @@ class RaceEngine:
             "showboat": ["showboat", "swerve", "spin"],
         }.get(rival.personality, ["swerve", "panic", "spin"])
         behavior = self.rng.choice(choices)
-        rival.behavior = behavior
 
+        if behavior == "spin":
+            self._kick_spin(rival, severity=0.70)
+            return f"{rival.name} THREW IT AWAY 💀"
+
+        rival.behavior = behavior
         if behavior == "panic":
             rival.behavior_timer = int(self.fps * 1.05)
             return f"{rival.name} PANICS 😂"
@@ -209,9 +237,6 @@ class RaceEngine:
             rival.behavior_timer = int(self.fps * 1.20)
             rival.target_lane = self.player.lane
             return f"{rival.name} IS PARKING THE BUS"
-        if behavior == "spin":
-            rival.behavior_timer = int(self.fps * 1.15)
-            return f"{rival.name} THREW IT AWAY 💀"
         if behavior == "showboat":
             rival.behavior_timer = int(self.fps * 1.40)
             return f"{rival.name} SHOWBOATS MID-RACE 😭"
@@ -277,9 +302,8 @@ class RaceEngine:
 
                 if strength > 0.67:
                     victim = a if self.rng.random() < 0.5 else b
-                    victim.behavior = "spin"
-                    victim.behavior_timer = max(victim.behavior_timer, int(self.fps * 0.80))
-                    victim.rotation += self.rng.choice([-1, 1]) * (0.30 + strength * 0.22)
+                    direction = victim.contact_side
+                    self._kick_spin(victim, direction=direction, severity=strength)
 
                 if i - self.last_event > self.fps * 0.45:
                     if strength > 0.67:
@@ -333,9 +357,7 @@ class RaceEngine:
 
             if strength > 0.72:
                 if reckless or self.rng.random() < 0.68:
-                    rival.behavior = "spin"
-                    rival.behavior_timer = max(rival.behavior_timer, int(self.fps * 0.85))
-                    rival.rotation += side_rival * (0.35 + strength * 0.20)
+                    self._kick_spin(rival, direction=side_rival, severity=strength)
                 elif not self.player.crashed:
                     self.player.crashed = True
                     self.player.crash_timer = self.rng.randint(12, 22)
@@ -372,7 +394,6 @@ class RaceEngine:
 
         for rival in self.rivals:
             prev_z = rival.z
-            rival.rotation *= 0.84
             if rival.contact_timer > 0:
                 rival.contact_timer -= 1
             else:
@@ -393,9 +414,35 @@ class RaceEngine:
                     rival.target_lane = max(-0.68, min(0.68, self.player.lane))
                     rival.speed += (rival.base_speed * 0.88 - rival.speed) * 0.08
                 elif rival.behavior == "spin":
-                    rival.speed *= 0.963
-                    rival.rotation += 0.46
-                    rival.target_lane += math.sin(i * 0.32) * 0.028
+                    # A spin is now a real loss-of-control state. The car slows hard,
+                    # slides sideways and reaches at most ~74 degrees before recovery.
+                    spin_target_speed = max(0.09, rival.base_speed * 0.18)
+                    rival.speed += (spin_target_speed - rival.speed) * 0.17
+                    rival.lane += rival.slide_velocity
+                    rival.slide_velocity *= 0.945
+
+                    if rival.behavior_timer > int(self.fps * 0.42):
+                        rival.rotation += rival.spin_rate
+                        rival.spin_rate *= 0.965
+                        if abs(rival.rotation) >= 1.05:
+                            rival.rotation = math.copysign(1.05, rival.rotation)
+                            rival.spin_rate *= 0.30
+                    else:
+                        # Recovery starts while the car is still slow. It cannot resume
+                        # normal race pace until its nose points down-track again.
+                        rival.spin_rate *= 0.68
+                        rival.rotation *= 0.80
+                        rival.slide_velocity *= 0.82
+                    rival.target_lane = rival.lane
+                    rival.heading *= 0.75
+                elif rival.behavior == "recover":
+                    rival.rotation *= 0.72
+                    rival.spin_rate *= 0.55
+                    rival.slide_velocity *= 0.72
+                    recovery_speed = max(0.18, rival.base_speed * 0.45)
+                    rival.speed += (recovery_speed - rival.speed) * 0.10
+                    rival.target_lane = rival.lane
+                    rival.heading *= 0.70
                 elif rival.behavior == "showboat":
                     rival.target_lane = 0.58 * math.sin(i * 0.24)
                     rival.rotation = math.sin(i * 0.20) * 0.13
@@ -404,9 +451,24 @@ class RaceEngine:
                     rival.speed += (min(0.99, rival.base_speed + 0.24) - rival.speed) * 0.17
                     rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
             else:
-                if rival.behavior != "normal":
+                if rival.behavior == "spin":
+                    rival.behavior = "recover"
+                    rival.behavior_timer = int(self.fps * 0.50)
+                    rival.spin_rate *= 0.45
+                    rival.slide_velocity *= 0.55
+                elif rival.behavior == "recover":
                     rival.behavior = "normal"
-                rival.speed += (rival.base_speed - rival.speed) * 0.050
+                    rival.rotation = 0.0
+                    rival.spin_rate = 0.0
+                    rival.slide_velocity = 0.0
+                    rival.speed = max(rival.speed, rival.base_speed * 0.42)
+                else:
+                    if rival.behavior != "normal":
+                        rival.behavior = "normal"
+                    rival.rotation *= 0.72
+                    if abs(rival.rotation) < 0.01:
+                        rival.rotation = 0.0
+                    rival.speed += (rival.base_speed - rival.speed) * 0.050
 
             rival.z += (self.player.speed - rival.speed) * 0.017
             if rival.z > 1.30 or rival.z < -0.18:
@@ -417,9 +479,10 @@ class RaceEngine:
                 rival.target_lane = self.rng.choice([-0.64, -0.32, 0.0, 0.32, 0.64])
                 rival.change_timer = self.rng.randint(int(self.fps * 0.8), int(self.fps * 2.3))
 
-            lane_delta = rival.target_lane - rival.lane
-            rival.heading = max(-0.18, min(0.18, lane_delta * 0.30))
-            rival.lane += lane_delta * (0.022 + 0.020 * min(1.0, rival.speed))
+            if rival.behavior not in {"spin", "recover"}:
+                lane_delta = rival.target_lane - rival.lane
+                rival.heading = max(-0.18, min(0.18, lane_delta * 0.30))
+                rival.lane += lane_delta * (0.022 + 0.020 * min(1.0, rival.speed))
             rival.lane = max(-0.80, min(0.80, rival.lane))
 
             if rival.active and prev_z < 1.01 <= rival.z and i - self.last_event > self.fps * 0.60:
@@ -430,7 +493,10 @@ class RaceEngine:
                 self.last_event = i
 
         if t > self.duration - 5.0:
-            survivors = [r for r in self.rivals if r.active]
+            survivors = [
+                r for r in self.rivals
+                if r.active and r.behavior not in {"spin", "recover"}
+            ]
             survivors.sort(key=lambda r: abs(r.z - 1.0))
             for rival in survivors[:3]:
                 desired = 0.91 if rival.z < 1.0 else 1.07
