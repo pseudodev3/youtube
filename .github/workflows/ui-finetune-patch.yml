@@ -118,3 +118,5 @@ jobs:
           git add race_engine.py renderer.py
           git commit -m "Give rivals unique liveries and compact HUD"
           git push
+
+# trigger
