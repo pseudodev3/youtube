@@ -226,8 +226,9 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         y0=horizon_y+(p0**1.72)*(H-horizon_y); y1=horizon_y+(p1**1.72)*(H-horizon_y)
         half0=(65+(p0**1.28)*ROAD_BOTTOM)*width_mul; half1=(65+(p1**1.28)*ROAD_BOTTOM)*width_mul
         c0=_road_center(p0,frame,cam_x); c1=_road_center(p1,frame,cam_x)
-        grass=(72,132,67,255) if j%2 else (76,143,70,255)
-        d.polygon([(0,y0),(W,y0),(W,y1),(0,y1)],fill=grass)
+        ground_mul = 0.94 if j % 2 else 1.03
+        roadside = tuple(max(0, min(255, int(c * ground_mul))) for c in ground) + (255,)
+        d.polygon([(0,y0),(W,y0),(W,y1),(0,y1)],fill=roadside)
         shoulder=28+p1*30
         d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],fill=(204,204,196,255))
         road=(50,52,55,255) if j%2 else (54,56,59,255)
@@ -405,7 +406,13 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         alpha=230 if frame.t<1.8 else int(max(0,230*(2.25-frame.t)/.45))
         d.rounded_rectangle([95,1260,W-95,1510],radius=36,fill=(5,8,12,alpha),outline=(255,215,90,min(220,alpha)),width=3)
         hook=getattr(frame,"hook_text",f"CAN RED REACH P{frame.target_position}?")
-        bb=d.textbbox((0,0),hook,font=title); d.text((W/2-(bb[2]-bb[0])/2,1300),hook,font=title,fill=(255,255,255,alpha))
+        hook_font=title
+        bb=d.textbbox((0,0),hook,font=hook_font)
+        if bb[2]-bb[0] > 820:
+            hook_font=_font(46,True); bb=d.textbbox((0,0),hook,font=hook_font)
+        if bb[2]-bb[0] > 820:
+            hook_font=_font(38,True); bb=d.textbbox((0,0),hook,font=hook_font)
+        d.text((W/2-(bb[2]-bb[0])/2,1300),hook,font=hook_font,fill=(255,255,255,alpha))
         rival=f"{getattr(frame,'track_name','CIRCUIT')} • WATCH {frame.featured_rival}"
         bb=d.textbbox((0,0),rival,font=sub); d.text((W/2-(bb[2]-bb[0])/2,1390),rival,font=sub,fill=(255,220,95,alpha))
         hint="something always happens around him..."
