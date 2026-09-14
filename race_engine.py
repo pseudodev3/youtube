@@ -22,6 +22,7 @@ class CarState:
     crash_spin_rate: float = 0.0
     crash_slide_velocity: float = 0.0
     crash_recovery_timer: int = 0
+    separation_timer: int = 0
 
 
 @dataclass
@@ -45,6 +46,7 @@ class RivalState:
     contact_strength: float = 0.0
     spin_rate: float = 0.0
     slide_velocity: float = 0.0
+    separation_timer: int = 0
 
 
 @dataclass
@@ -99,6 +101,8 @@ class RaceEngine:
         self.last_drift = -999
         self.crash_chain_hits = 0
         self.crash_chain_until = -999
+        self.held_event: str | None = None
+        self.event_until = -999
 
         self.target_position = 5 if self.skill < .34 else 4 if self.skill < .58 else 3
         self.featured_index = seed % len(self.DRIVER_CAST)
@@ -283,6 +287,17 @@ class RaceEngine:
             return fallback
         return 1.0 if b_lane > a_lane else -1.0
 
+    def _hold_event(self, text: str | None, i: int) -> str | None:
+        if text:
+            major = any(word in text for word in ("PILEUP", "CRASH", "HUGE HIT", "FULL SPIN", "BIG CONTACT"))
+            hold = 1.05 if major else 0.62
+            self.held_event = text
+            self.event_until = i + int(self.fps * hold)
+            return text
+        if self.held_event and i <= self.event_until:
+            return self.held_event
+        return None
+
     def _record_crash_chain(self, i: int, strength: float) -> str | None:
         """Track connected hard hits so a second impact reads as a pileup."""
         if strength < 0.72:
@@ -290,7 +305,7 @@ class RaceEngine:
         if i > self.crash_chain_until:
             self.crash_chain_hits = 0
         self.crash_chain_hits += 1
-        self.crash_chain_until = i + int(self.fps * 0.85)
+        self.crash_chain_until = i + int(self.fps * 1.20)
         if self.crash_chain_hits == 2:
             self.last_event = i
             return "PILEUP! 😭"
@@ -335,6 +350,73 @@ class RaceEngine:
                     min(0.72, driver.lane + escape * (0.42 + 0.08 * (1.0 - lateral / 0.34))),
                 )
                 driver.speed *= 0.94
+
+    def _separate_crash_clusters(self) -> int:
+        """Project overlapping crash bodies apart without cancelling real impacts.
+
+        Contact impulses run first. This method then performs several cheap positional
+        correction passes, which matters when 3+ cars are in the same incident and a
+        pair-by-pair solver would otherwise leave one pair visually intersecting.
+        """
+        crash_states = {"spin", "big_spin", "aftermath", "recover", "late_react", "avoid_crash"}
+        active = [r for r in self.rivals if r.active]
+        player_z = 1.01
+        cluster_members: set[str] = set()
+
+        for _ in range(4):
+            for ai in range(len(active)):
+                for bi in range(ai + 1, len(active)):
+                    a, b = active[ai], active[bi]
+                    involved = (
+                        a.separation_timer > 0 or b.separation_timer > 0
+                        or a.behavior in crash_states or b.behavior in crash_states
+                        or a.contact_strength >= 0.72 or b.contact_strength >= 0.72
+                    )
+                    if not involved:
+                        continue
+                    dz = abs(a.z - b.z)
+                    dl = abs(a.lane - b.lane)
+                    if dz >= 0.072 or dl >= 0.178:
+                        continue
+
+                    cluster_members.update((a.name, b.name))
+                    side = self._contact_side(a.lane, b.lane, 1.0 if a.color < b.color else -1.0)
+                    lane_overlap = max(0.0, 0.178 - dl)
+                    z_overlap = max(0.0, 0.072 - dz)
+                    lateral = lane_overlap * 0.52 + 0.0025
+                    a.lane = max(-0.82, min(0.82, a.lane - side * lateral))
+                    b.lane = max(-0.82, min(0.82, b.lane + side * lateral))
+                    if a.z <= b.z:
+                        a.z -= z_overlap * 0.52
+                        b.z += z_overlap * 0.52
+                    else:
+                        b.z -= z_overlap * 0.52
+                        a.z += z_overlap * 0.52
+
+            for rival in active:
+                involved = (
+                    self.player.separation_timer > 0 or rival.separation_timer > 0
+                    or self.player.crashed or rival.behavior in crash_states
+                    or self.player.contact_strength >= 0.72 or rival.contact_strength >= 0.72
+                )
+                if not involved:
+                    continue
+                dz = abs(rival.z - player_z)
+                dl = abs(rival.lane - self.player.lane)
+                if dz >= 0.070 or dl >= 0.172:
+                    continue
+
+                cluster_members.update(("RED", rival.name))
+                side = self._contact_side(self.player.lane, rival.lane, 1.0 if rival.color % 2 == 0 else -1.0)
+                lane_overlap = max(0.0, 0.172 - dl)
+                z_overlap = max(0.0, 0.070 - dz)
+                lateral = lane_overlap * 0.48 + 0.0025
+                self.player.lane = max(-0.82, min(0.82, self.player.lane - side * lateral))
+                rival.lane = max(-0.82, min(0.82, rival.lane + side * lateral))
+                # RED's camera plane is fixed, so move the rival longitudinally.
+                rival.z += (-z_overlap if rival.z < player_z else z_overlap) * 0.92
+
+        return len(cluster_members)
 
     def _resolve_rival_contacts(self, i: int) -> str | None:
         event = None
@@ -403,6 +485,10 @@ class RaceEngine:
                 a.contact_timer = b.contact_timer = timer
                 a.contact_side, b.contact_side = side_a, side_b
                 a.contact_strength = b.contact_strength = strength
+                if strength >= 0.72:
+                    sep = int(self.fps * (0.42 if strength >= 0.90 else 0.26))
+                    a.separation_timer = max(a.separation_timer, sep)
+                    b.separation_timer = max(b.separation_timer, sep)
                 a.heading -= side_a * heading_impulse
                 b.heading -= side_b * heading_impulse
                 mean_speed = (a.speed + b.speed) * 0.5
@@ -510,6 +596,10 @@ class RaceEngine:
             rival.contact_timer = timer
             rival.contact_side = side_rival
             rival.contact_strength = strength
+            if strength >= 0.72:
+                sep = int(self.fps * (0.44 if strength >= 0.93 else 0.27))
+                self.player.separation_timer = max(self.player.separation_timer, sep)
+                rival.separation_timer = max(rival.separation_timer, sep)
             self.player.heading -= side_red * heading_impulse
             rival.heading -= side_rival * heading_impulse
             self.player.speed *= player_keep
@@ -563,6 +653,9 @@ class RaceEngine:
         event = None
         shake = 0.0
 
+        if self.player.separation_timer > 0:
+            self.player.separation_timer -= 1
+
         if self.player.contact_timer > 0:
             self.player.contact_timer -= 1
             if self.player.contact_strength >= 0.82 and not self.player.crashed:
@@ -580,6 +673,8 @@ class RaceEngine:
 
         for rival in self.rivals:
             prev_z = rival.z
+            if rival.separation_timer > 0:
+                rival.separation_timer -= 1
             if rival.contact_timer > 0:
                 rival.contact_timer -= 1
                 if rival.contact_strength >= 0.82 and rival.behavior not in {"spin", "big_spin", "aftermath", "recover"}:
@@ -664,10 +759,12 @@ class RaceEngine:
                     rival.speed += (min(0.99, rival.base_speed + 0.24) - rival.speed) * 0.17
                     rival.target_lane = max(-0.68, min(0.68, self.player.lane + math.sin(i*.11)*0.18))
                 elif rival.behavior == "avoid_crash":
-                    rival.speed += (rival.base_speed * 0.68 - rival.speed) * 0.15
+                    rival.speed += (rival.base_speed * 0.54 - rival.speed) * 0.18
+                    rival.heading = max(-0.24, min(0.24, (rival.target_lane - rival.lane) * 0.42))
                 elif rival.behavior == "late_react":
-                    rival.speed += (rival.base_speed * 0.90 - rival.speed) * 0.08
-                    rival.heading += math.sin(i * 0.41) * 0.012
+                    # Too late to fully avoid it: small brake lift, mostly holds the line.
+                    rival.speed += (rival.base_speed * 0.82 - rival.speed) * 0.10
+                    rival.heading += math.sin(i * 0.41) * 0.010
             else:
                 if rival.behavior in {"spin", "big_spin"}:
                     was_big = rival.behavior == "big_spin"
@@ -847,6 +944,11 @@ class RaceEngine:
             event = player_contact_event
             shake = max(shake, 0.16 + self.player.contact_strength * 0.12)
 
+        cluster_size = self._separate_crash_clusters()
+        if cluster_size >= 3 and i <= self.crash_chain_until and i - self.last_event > int(self.fps * 0.35):
+            event = f"{cluster_size}-CAR PILEUP! 😭"
+            self.last_event = i
+
         road_width = 0.86 - abs(curve) * (0.08 + 0.07 * self.skill)
         road_width = max(0.67, min(0.88, road_width))
         position = self._position()
@@ -858,6 +960,8 @@ class RaceEngine:
             else:
                 missed = position - self.target_position
                 event = f"MISSED BY {missed} PLACE" if missed == 1 else f"MISSED BY {missed} PLACES"
+
+        event = self._hold_event(event, i)
 
         return RaceFrame(
             t=t,

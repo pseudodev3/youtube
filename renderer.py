@@ -220,11 +220,15 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:
             _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
             d=ImageDraw.Draw(img,"RGBA")
-            smoke_count=16 if rival.behavior=="big_spin" else 10 if rival.behavior=="aftermath" else 7
+            smoke_count=18 if rival.behavior=="big_spin" else 13 if rival.behavior=="aftermath" else 8
             for _ in range(smoke_count):
-                rr=rng.uniform(6,19)*scale; sx=x+rng.uniform(-42,42)*scale; sy=y+rng.uniform(28,110)*scale
-                alpha=rng.randint(40,105) if rival.behavior=="big_spin" else rng.randint(35,90)
+                rr=rng.uniform(6,21)*scale; sx=x+rng.uniform(-46,46)*scale; sy=y+rng.uniform(28,118)*scale
+                alpha=rng.randint(45,112) if rival.behavior=="big_spin" else rng.randint(38,94)
                 d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,alpha))
+            if rival.behavior in {"big_spin","aftermath"}:
+                for _ in range(5):
+                    ox=rng.uniform(-58,58)*scale; oy=rng.uniform(30,105)*scale; rr=rng.uniform(2,5)*scale
+                    d.rectangle([x+ox-rr,y+oy-rr,x+ox+rr,y+oy+rr],fill=rng.choice([(42,42,45,150),(92,96,101,135),(245,173,68,145)]))
             if rival.behavior=="big_spin":
                 d.line([(x-38*scale,y+55*scale),(x-rival.slide_velocity*9000,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
                 d.line([(x+38*scale,y+55*scale),(x-rival.slide_velocity*9000+76*scale,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
@@ -239,7 +243,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_impact_debris(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
 
-        if rival.behavior in {"panic","brake_check"}:
+        if rival.behavior in {"panic","brake_check","avoid_crash"}:
             s=scale
             d.ellipse([x-40*s,y+62*s,x-20*s,y+80*s],fill=(255,65,45,240)); d.ellipse([x+20*s,y+62*s,x+40*s,y+80*s],fill=(255,65,45,240))
         if (rival.behavior!="normal" or rival.name==frame.featured_rival) and p>.28:
@@ -281,9 +285,12 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
         _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
-        for _ in range(14):
-            rr=rng.uniform(10,26); sx=px+rng.uniform(-65,65); sy=py+rng.uniform(45,155)
-            d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,90)))
+        for _ in range(18):
+            rr=rng.uniform(10,28); sx=px+rng.uniform(-72,72); sy=py+rng.uniform(42,165)
+            d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(38,96)))
+        for _ in range(6):
+            ox=rng.uniform(-72,72); oy=rng.uniform(45,145); rr=rng.uniform(2,5)
+            d.rectangle([px+ox-rr,py+oy-rr,px+ox+rr,py+oy+rr],fill=rng.choice([(45,45,48,155),(105,108,112,140),(246,172,65,150)]))
     elif frame.player.drifting and abs(frame.player.drift_angle)>.08:
         _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
     elif frame.player.contact_timer>0:
