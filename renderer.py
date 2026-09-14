@@ -87,7 +87,6 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
 
 def _rotated_car(img: Image.Image, cx: float, cy: float, scale: float, angle_deg: float,
                  player: bool = False, color_id: int = 0):
-    """Rotate the whole car sprite, used only for real drifts/spins."""
     box = int(max(300, 360 * scale))
     layer = Image.new("RGBA", (box, box), (0,0,0,0))
     ld = ImageDraw.Draw(layer, "RGBA")
@@ -105,6 +104,11 @@ def _road_center(p: float, frame, cam_x: float) -> float:
     return W/2 + near + far + sweep + cam_x
 
 
+def _rotate_point(x: float, y: float, angle_deg: float) -> tuple[float, float]:
+    a = math.radians(angle_deg)
+    return x*math.cos(a)-y*math.sin(a), x*math.sin(a)+y*math.cos(a)
+
+
 def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Image:
     rng = random.Random(frame_no // 3)
     img = Image.new("RGB", (W,H), (116,174,224))
@@ -118,7 +122,6 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
     d.polygon(mountains, fill=(81,111,122,255))
     d.rectangle([0,600,W,H], fill=(78,139,72,255))
 
-    # Keep the camera calm. Action now comes from racing/drifting, not screen shake.
     cam_x = int(frame.player.heading * 18 + (rng.random()-.5) * 7 * frame.shake)
     horizon_y = HORIZON + int(frame.shake * 2)
 
@@ -149,8 +152,6 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             lw0=max(2,half0*.016); lw1=max(2,half1*.016)
             d.polygon([(c0-lw0,y0),(c0+lw0,y0),(c1+lw1,y1),(c1-lw1,y1)], fill=(245,240,210,225))
 
-    # Chevron boards appear on the outside of harder bends so the road reads as a
-    # genuine corner/hairpin instead of a moving straight strip.
     if abs(frame.road_curve) > .45:
         outside = 1 if frame.road_curve > 0 else -1
         for n in range(4):
@@ -176,7 +177,9 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             d.rectangle([x-size*.18,y-size*1.8,x+size*.18,y], fill=(245,245,238,255))
             d.rectangle([x-size*.18,y-size*1.15,x+size*.18,y-size*.78], fill=(28,28,30,255))
 
-    # Fixed field only: once a rival has left the race view it stays gone.
+    # Fixed recurring cast. When a driver does something stupid, label that car for
+    # a moment so viewers learn the personalities across episodes.
+    tiny = _font(22, True)
     for rival in sorted([r for r in frame.rivals if r.active], key=lambda r:r.z):
         if rival.z < 0.0 or rival.z > 1.18:
             continue
@@ -191,20 +194,26 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             angle = rival.rotation * 70.0
             _rotated_car(img,x,y,scale,angle,False,rival.color)
             d = ImageDraw.Draw(img,"RGBA")
-            # comic smoke puff makes the spin obvious
-            for n in range(5):
-                rr = rng.uniform(6,15)*scale
-                sx=x+rng.uniform(-28,28)*scale
-                sy=y+rng.uniform(30,85)*scale
-                d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,80)))
+            for n in range(7):
+                rr = rng.uniform(6,17)*scale
+                sx=x+rng.uniform(-32,32)*scale
+                sy=y+rng.uniform(30,92)*scale
+                d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,90)))
         else:
             _car(d,x,y,scale,rival.heading,False,rival.color)
 
-        # Panic braking is visible, not just a text event.
-        if rival.behavior == "panic":
+        if rival.behavior in {"panic", "brake_check"}:
             s=scale
-            d.ellipse([x-38*s,y+62*s,x-22*s,y+78*s],fill=(255,65,45,220))
-            d.ellipse([x+22*s,y+62*s,x+38*s,y+78*s],fill=(255,65,45,220))
+            d.ellipse([x-40*s,y+62*s,x-20*s,y+80*s],fill=(255,65,45,240))
+            d.ellipse([x+20*s,y+62*s,x+40*s,y+80*s],fill=(255,65,45,240))
+
+        if rival.behavior != "normal" and p > .30:
+            text = rival.name
+            bb = d.textbbox((0,0), text, font=tiny)
+            tw = bb[2]-bb[0]
+            ty = y - 125*scale
+            d.rounded_rectangle([x-tw/2-10,ty-4,x+tw/2+10,ty+28],radius=8,fill=(0,0,0,150))
+            d.text((x-tw/2,ty),text,font=tiny,fill=(255,255,255,230))
 
     py=1605
     pp=((py-horizon_y)/(H-horizon_y))**(1/1.72)
@@ -212,17 +221,27 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
     pcenter=_road_center(pp,frame,cam_x)
     px=pcenter+frame.player.lane*phalf*.68
 
-    # Bigger smoke, longer skid arcs, and whole-car rotation make drift unmistakable.
+    # Proper drift read: body points INTO the corner while the car's actual path slides
+    # OUTWARD. Rear-tyre smoke originates from rotated rear-wheel locations and trails
+    # along the slip direction instead of straight down the screen.
+    drift_angle_deg = frame.player.drift_angle * 54.0
     if frame.player.drifting:
-        drift_dir = 1 if frame.player.drift_angle > 0 else -1
-        for n in range(20):
-            sy=py+72+rng.uniform(0,190)
-            sx=px+rng.uniform(-72,72)-drift_dir*(sy-py)*.24
-            r=rng.uniform(12,32)
-            d.ellipse([sx-r,sy-r,sx+r,sy+r], fill=(220,224,228,rng.randint(35,85)))
-        for side in (-1,1):
-            sx=px+side*54
-            d.line([(sx,py+78),(sx-drift_dir*105,py+285)], fill=(18,18,20,115), width=10)
+        slip_dir = 1 if frame.player.drift_slip > 0 else -1
+        rear_points = [(-56, 72), (56, 72)]
+        for local_x, local_y in rear_points:
+            rx, ry = _rotate_point(local_x, local_y, drift_angle_deg)
+            tx, ty = px + rx, py + ry
+            for n in range(10):
+                trail = 18 + n*17 + rng.uniform(-5,5)
+                sx = tx - slip_dir*trail*.55 + rng.uniform(-10,10)
+                sy = ty + trail + rng.uniform(-7,7)
+                r = 10 + n*.9 + rng.uniform(0,7)
+                d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,max(18,78-n*5)))
+            d.line([(tx,ty),(tx-slip_dir*115,ty+235)],fill=(15,15,17,125),width=10)
+
+        # A faint velocity trail shows that the car is moving in a different direction
+        # than the nose is pointing — the visual signature of a drift.
+        d.line([(px,py+90),(px-slip_dir*150,py+280)],fill=(255,255,255,28),width=4)
     elif abs(frame.player.heading)>.15 or frame.player.crashed:
         for side in (-1,1):
             sx=px+side*54
@@ -235,21 +254,23 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
             d.ellipse([sx-r,sy-r,sx+r,sy+r], fill=rng.choice([(255,210,80,220),(255,118,48,220),(255,240,170,210)]))
 
     if frame.player.drifting and abs(frame.player.drift_angle) > .08:
-        _rotated_car(img,px,py,1.15,frame.player.drift_angle*42.0,True,0)
+        _rotated_car(img,px,py,1.15,drift_angle_deg,True,0)
         d=ImageDraw.Draw(img,"RGBA")
     else:
         _car(d,px,py,1.15,frame.player.heading,True,0)
 
-    d.rounded_rectangle([48,52,W-48,240], radius=34, fill=(9,14,21,182), outline=(255,255,255,45), width=2)
-    f1=_font(54,True); f2=_font(34,True)
+    # HUD now has a real race stake: viewers can watch Red climb or lose places.
+    d.rounded_rectangle([48,52,W-48,250], radius=34, fill=(9,14,21,182), outline=(255,255,255,45), width=2)
+    f1=_font(54,True); f2=_font(34,True); fpos=_font(42,True)
     d.text((82,78),f"EP. {episode:03d}",font=f1,fill=(255,255,255,255))
     level=max(1,int(skill*100))
     d.text((82,151),f"DRIVER LEVEL {level}",font=f2,fill=(237,242,248,255))
-    d.text((W-330,95),f"{int(frame.player.speed*310):03d} KM/H",font=f2,fill=(255,224,126,255))
+    d.text((W-330,82),f"{int(frame.player.speed*310):03d} KM/H",font=f2,fill=(255,224,126,255))
+    d.text((W-245,145),f"P{frame.position}/{frame.total_cars}",font=fpos,fill=(255,255,255,255))
 
-    bx0,by0,bx1,by1=82,211,W-82,226
+    bx0,by0,bx1,by1=82,219,W-82,234
     d.rounded_rectangle([bx0,by0,bx1,by1],radius=7,fill=(255,255,255,42))
-    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*skill,by1],radius=7,fill=(255,213,90,245))
+    d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*frame.race_progress,by1],radius=7,fill=(255,213,90,245))
 
     if frame.event_text:
         text=frame.event_text
@@ -257,12 +278,25 @@ def render_frame(frame, episode: int, skill: float, frame_no: int) -> Image.Imag
         d.rounded_rectangle([W/2-tw/2-34,330,W/2+tw/2+34,420],radius=24,fill=(0,0,0,178),outline=(255,255,255,34),width=2)
         d.text((W/2-tw/2,346),text,font=f1,fill=(255,255,255,255))
 
-    label="BEGINNER" if skill<.28 else "GETTING GOOD" if skill<.58 else "PRO"
+    if frame.race_progress > .93:
+        if skill < .42:
+            label="NEXT UNLOCK: MOUNTAIN ROAD @ LVL 42"
+        elif skill < .56:
+            label="NEXT UNLOCK: NIGHT CITY @ LVL 56"
+        elif skill < .68:
+            label="NEXT UNLOCK: RAIN @ LVL 68"
+        else:
+            label="NEXT RACE GETS HARDER"
+        lf=_font(34,True)
+    else:
+        label="BEGINNER" if skill<.28 else "GETTING GOOD" if skill<.58 else "PRO"
+        lf=f1
+
     d.rounded_rectangle([60,1740,W-60,1850],radius=30,fill=(8,10,14,205))
-    bbox=d.textbbox((0,0),label,font=f1); tw=bbox[2]-bbox[0]
-    d.text((W/2-tw/2,1766),label,font=f1,fill=(255,255,255,255))
+    bbox=d.textbbox((0,0),label,font=lf); tw=bbox[2]-bbox[0]
+    d.text((W/2-tw/2,1766),label,font=lf,fill=(255,255,255,255))
 
     if frame.shake>.2:
-        overlay=Image.new("RGBA",(W,H),(255,255,255,int(20*min(1.0,frame.shake))))
+        overlay=Image.new("RGBA",(W,H),(255,255,255,int(16*min(1.0,frame.shake))))
         img=Image.alpha_composite(img.convert("RGBA"),overlay).convert("RGB")
     return img
