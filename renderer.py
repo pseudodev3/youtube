@@ -94,6 +94,24 @@ def _rotate_point(x: float,y: float,angle_deg: float)->tuple[float,float]:
     return x*math.cos(a)-y*math.sin(a),x*math.sin(a)+y*math.cos(a)
 
 
+def _draw_contact_sparks(d: ImageDraw.ImageDraw, rng: random.Random, x: float, y: float,
+                         scale: float, side: float, strength: float):
+    if strength <= 0.02:
+        return
+    sx = x + side * 54 * scale
+    sy = y + 10 * scale
+    count = max(4, int(5 + strength * 10))
+    for _ in range(count):
+        length = rng.uniform(12, 42) * scale * (0.7 + strength)
+        angle = rng.uniform(-0.75, 0.75) + (0 if side > 0 else math.pi)
+        ex = sx + math.cos(angle) * length
+        ey = sy + math.sin(angle) * length + rng.uniform(4, 20) * scale
+        color = rng.choice([(255,230,120,245),(255,167,58,245),(255,248,205,235)])
+        d.line([(sx,sy),(ex,ey)], fill=color, width=max(2,int(3*scale)))
+        rr=max(2,3*scale)
+        d.ellipse([ex-rr,ey-rr,ex+rr,ey+rr],fill=color)
+
+
 def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
     img=Image.new("RGB",(W,H),(116,174,224)); d=ImageDraw.Draw(img,"RGBA")
@@ -150,21 +168,34 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     tiny=_font(22,True)
     for rival in sorted([r for r in frame.rivals if r.active],key=lambda r:r.z):
-        if rival.z<0.0 or rival.z>1.18: continue
+        if rival.z<0.0 or rival.z>1.18:
+            continue
         p=.10+rival.z*.72; y=horizon_y+(p**1.72)*(H-horizon_y)
         half=(65+(p**1.28)*ROAD_BOTTOM)*width_mul; center=_road_center(p,frame,cam_x)
         x=center+rival.lane*half*.68; scale=.62+.52*p
+
+        contact_angle=0.0
+        if rival.contact_timer>0:
+            contact_angle=rival.contact_side*rival.contact_strength*6.0*math.sin(frame.t*44.0)
+
         if rival.behavior=="spin" or abs(rival.rotation)>.10:
-            _rotated_car(img,x,y,scale,rival.rotation*70.0,False,rival.color); d=ImageDraw.Draw(img,"RGBA")
+            _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
+            d=ImageDraw.Draw(img,"RGBA")
             for _ in range(7):
                 rr=rng.uniform(6,17)*scale; sx=x+rng.uniform(-32,32)*scale; sy=y+rng.uniform(30,92)*scale
                 d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(35,90)))
+        elif rival.contact_timer>0:
+            _rotated_car(img,x,y,scale,contact_angle,False,rival.color)
+            d=ImageDraw.Draw(img,"RGBA")
         else:
             _car(d,x,y,scale,rival.heading,False,rival.color)
+
+        if rival.contact_timer>0:
+            _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
+
         if rival.behavior in {"panic","brake_check"}:
             s=scale
             d.ellipse([x-40*s,y+62*s,x-20*s,y+80*s],fill=(255,65,45,240)); d.ellipse([x+20*s,y+62*s,x+40*s,y+80*s],fill=(255,65,45,240))
-        # Featured rival is always identifiable. Other drivers get labels only during incidents.
         if (rival.behavior!="normal" or rival.name==frame.featured_rival) and p>.28:
             text=rival.name; bb=d.textbbox((0,0),text,font=tiny); tw=bb[2]-bb[0]; ty=y-125*scale
             outline=(255,220,95,220) if rival.name==frame.featured_rival else (255,255,255,35)
@@ -185,7 +216,6 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
                 r=10+n*.9+rng.uniform(0,7)
                 d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,max(18,78-n*5)))
             d.line([(tx,ty),(tx-slip_dir*115,ty+235)],fill=(15,15,17,125),width=10)
-        # Countersteer indicator: front of car points into corner while motion trails outward.
         d.line([(px,py+90),(px-slip_dir*150,py+280)],fill=(255,255,255,28),width=4)
     elif abs(frame.player.heading)>.15 or frame.player.crashed:
         for side in (-1,1):
@@ -198,12 +228,20 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             sx=px+math.cos(ang)*dist; sy=py+math.sin(ang)*dist; r=rng.uniform(3,8)
             d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=rng.choice([(255,210,80,220),(255,118,48,220),(255,240,170,210)]))
 
+    player_contact_angle=0.0
+    if frame.player.contact_timer>0:
+        player_contact_angle=frame.player.contact_side*frame.player.contact_strength*7.0*math.sin(frame.t*42.0)
+
     if frame.player.drifting and abs(frame.player.drift_angle)>.08:
-        _rotated_car(img,px,py,1.15,drift_angle_deg,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+    elif frame.player.contact_timer>0:
+        _rotated_car(img,px,py,1.15,player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
     else:
         _car(d,px,py,1.15,frame.player.heading,True,0)
 
-    # Persistent race HUD: viewers always know the stake.
+    if frame.player.contact_timer>0:
+        _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
+
     d.rounded_rectangle([48,52,W-48,264],radius=34,fill=(9,14,21,188),outline=(255,255,255,45),width=2)
     f1=_font(54,True); f2=_font(34,True); fpos=_font(42,True); small=_font(27,True)
     d.text((82,76),f"EP. {episode:03d}",font=f1,fill=(255,255,255,255))
@@ -217,14 +255,12 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     if frame.event_text:
         text=frame.event_text; box=d.textbbox((0,0),text,font=f1); tw=box[2]-box[0]
-        # Keep long comedy captions on screen without overflowing phone width.
         event_font=f1
         if tw>900:
             event_font=_font(40,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
         d.rounded_rectangle([W/2-tw/2-30,320,W/2+tw/2+30,414],radius=24,fill=(0,0,0,185),outline=(255,255,255,40),width=2)
         d.text((W/2-tw/2,340),text,font=event_font,fill=(255,255,255,255))
 
-    # Cold open immediately creates a question in the viewer's head.
     if frame.t<2.25:
         title=_font(58,True); sub=_font(32,True)
         alpha=230 if frame.t<1.8 else int(max(0,230*(2.25-frame.t)/.45))
@@ -237,7 +273,6 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         hintf=_font(27,False); bb=d.textbbox((0,0),hint,font=hintf)
         d.text((W/2-(bb[2]-bb[0])/2,1440),hint,font=hintf,fill=(230,234,240,alpha))
 
-    # End card gives payoff AND a reason to watch the next episode.
     if frame.race_progress>.945:
         success=frame.position<=frame.target_position
         result=f"P{frame.position} — TARGET {'CLEARED' if success else 'MISSED'}"
