@@ -38,9 +38,9 @@ def upload_video(video_path: Path, metadata: dict) -> str:
         raise RuntimeError("YouTube upload requested while YOUTUBE_UPLOAD_ENABLED is false")
 
     youtube = build("youtube", "v3", credentials=_credentials(), cache_discovery=False)
-    privacy_status = os.getenv("YOUTUBE_PRIVACY_STATUS", "unlisted").strip().lower()
+    privacy_status = os.getenv("YOUTUBE_PRIVACY_STATUS", "public").strip().lower()
     if privacy_status not in {"private", "unlisted", "public"}:
-        privacy_status = "unlisted"
+        privacy_status = "public"
 
     body = {
         "snippet": {
