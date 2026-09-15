@@ -11,7 +11,7 @@ from career import apply_uploaded_episode, load_career, save_career
 from metadata import build_metadata, write_metadata
 from quality_control import evaluate_episode, write_qc
 from race_engine import RaceEngine
-from renderer import W, H, render_frame
+from renderer_enhanced import W, H, render_frame
 from showrunner import music_state_at, plan_episode, write_plan
 from youtube_upload import upload_enabled, upload_video
 
