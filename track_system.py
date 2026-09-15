@@ -14,7 +14,10 @@ ROAD_CATALOG = {
     },
     "country": {
         "threshold": 0.28,
-        "theme": "country",
+        # The original country palette matched Training almost exactly. Reuse the
+        # darker rural/woodland renderer palette so this unlock reads immediately
+        # as a new location while retaining Country's own road geometry/variants.
+        "theme": "forest",
         "display": "Country Roads",
         "variants": ["Farm Run", "Rolling Hills", "Village Sprint"],
         "curve_scale": 0.90,
