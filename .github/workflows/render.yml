@@ -6,8 +6,7 @@ on:
     paths:
       - ".github/run-now"
   schedule:
-    - cron: "17 8 * * *"
-    - cron: "17 20 * * *"
+    - cron: "17 * * * *"
 
 permissions:
   contents: write
@@ -36,13 +35,70 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check whether a GRIDLOOP slot is due
+        id: slot
+        shell: bash
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Non-scheduled trigger: producing immediately."
+            exit 0
+          fi
+
+          python - <<'PY'
+          import datetime as dt
+          import os
+          import subprocess
+
+          UTC = dt.timezone.utc
+          LAGOS = dt.timezone(dt.timedelta(hours=1))
+          now = dt.datetime.now(UTC).astimezone(LAGOS)
+
+          today = now.date()
+          morning = dt.datetime.combine(today, dt.time(9, 17), tzinfo=LAGOS)
+          evening = dt.datetime.combine(today, dt.time(21, 17), tzinfo=LAGOS)
+
+          if now < morning:
+              previous = today - dt.timedelta(days=1)
+              latest_slot = dt.datetime.combine(previous, dt.time(21, 17), tzinfo=LAGOS)
+              slot_name = "evening"
+          elif now < evening:
+              latest_slot = morning
+              slot_name = "morning"
+          else:
+              latest_slot = evening
+              slot_name = "evening"
+
+          try:
+              stamp = subprocess.check_output(
+                  ["git", "log", "-1", "--format=%cI", "--", "career_state.json"],
+                  text=True,
+              ).strip()
+              last_progress = dt.datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(LAGOS)
+          except Exception:
+              last_progress = dt.datetime(1970, 1, 1, tzinfo=LAGOS)
+
+          due = last_progress < latest_slot
+          output = os.environ["GITHUB_OUTPUT"]
+          with open(output, "a", encoding="utf-8") as f:
+              f.write(f"run={'true' if due else 'false'}\n")
+              f.write(f"slot={slot_name}\n")
+
+          print(f"Lagos now: {now.isoformat()}")
+          print(f"Latest due slot: {latest_slot.isoformat()} ({slot_name})")
+          print(f"Last career progression: {last_progress.isoformat()}")
+          print(f"Produce episode: {due}")
+          PY
+
       - name: Set up Python
+        if: steps.slot.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
+        if: steps.slot.outputs.run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg fonts-dejavu-core
@@ -50,10 +106,11 @@ jobs:
           pip install -r requirements.txt
 
       - name: Produce, QC and optionally upload episode
+        if: steps.slot.outputs.run == 'true'
         run: python main.py
 
       - name: Upload production artifacts
-        if: always()
+        if: always() && steps.slot.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: gridloop-episode
@@ -62,7 +119,7 @@ jobs:
           retention-days: 7
 
       - name: Save uploaded career progression
-        if: success()
+        if: success() && steps.slot.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
