@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "episode": 5,
-  "driver_skill": 0.309,
+  "episode": 6,
+  "driver_skill": 0.341,
   "road_tier": 2,
-  "car_tier": 2,
-  "wins": 2,
+  "car_tier": 3,
+  "wins": 3,
   "crashes": 1,
-  "uploads": 4,
+  "uploads": 5,
   "unlocked_roads": [
     "training",
     "country"
   ],
   "last_track": "country",
-  "last_story": "comeback",
-  "last_result": "target_missed",
-  "last_featured_rival": "ORANGE",
-  "last_video_id": "uY_VYy4pwAY",
+  "last_story": "clean_duel",
+  "last_result": "target_cleared",
+  "last_featured_rival": "PURPLE",
+  "last_video_id": "mZZdyb-cIQM",
   "rivals": {
     "BLUE": {
       "rivalry": 1,
@@ -44,10 +44,10 @@
     "PURPLE": {
       "rivalry": 1,
       "wins_over_red": 0,
-      "losses_to_red": 0,
+      "losses_to_red": 1,
       "incidents": 0,
-      "last_featured_episode": -999,
-      "last_result": null
+      "last_featured_episode": 5,
+      "last_result": "red_won"
     },
     "WHITE": {
       "rivalry": 3,
@@ -122,6 +122,18 @@
       "result": "target_missed",
       "crashed": true,
       "events": 17
+    },
+    {
+      "episode": 5,
+      "video_id": "mZZdyb-cIQM",
+      "story_type": "clean_duel",
+      "track": "country",
+      "featured_rival": "PURPLE",
+      "final_position": 5,
+      "target_position": 5,
+      "result": "target_cleared",
+      "crashed": false,
+      "events": 18
     }
   ]
 }
