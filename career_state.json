@@ -1,21 +1,21 @@
 {
   "version": 2,
-  "episode": 8,
-  "driver_skill": 0.386,
+  "episode": 9,
+  "driver_skill": 0.411,
   "road_tier": 2,
   "car_tier": 3,
   "wins": 4,
   "crashes": 2,
-  "uploads": 7,
+  "uploads": 8,
   "unlocked_roads": [
     "training",
     "country"
   ],
-  "last_track": "country",
-  "last_story": "clean_duel",
+  "last_track": "training",
+  "last_story": "pileup_escape",
   "last_result": "target_missed",
-  "last_featured_rival": "BLUE",
-  "last_video_id": "3KBGUSqf9hI",
+  "last_featured_rival": "ORANGE",
+  "last_video_id": "Du51AbDB3RM",
   "rivals": {
     "BLUE": {
       "rivalry": 2,
@@ -34,11 +34,11 @@
       "last_result": "red_won"
     },
     "ORANGE": {
-      "rivalry": 2,
-      "wins_over_red": 1,
+      "rivalry": 3,
+      "wins_over_red": 2,
       "losses_to_red": 0,
       "incidents": 0,
-      "last_featured_episode": 4,
+      "last_featured_episode": 8,
       "last_result": "rival_won"
     },
     "PURPLE": {
@@ -158,6 +158,18 @@
       "result": "target_missed",
       "crashed": false,
       "events": 10
+    },
+    {
+      "episode": 8,
+      "video_id": "Du51AbDB3RM",
+      "story_type": "pileup_escape",
+      "track": "training",
+      "featured_rival": "ORANGE",
+      "final_position": 6,
+      "target_position": 5,
+      "result": "target_missed",
+      "crashed": false,
+      "events": 12
     }
   ]
 }
