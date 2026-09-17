@@ -1,0 +1,228 @@
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+from typing import Any
+
+from PIL import Image, ImageDraw
+
+W, H = 1080, 1920
+_BINARY = Path(__file__).resolve().parent / "cpp" / "map_engine"
+_CACHE: dict[tuple[str, int, int, int], dict[str, Any] | None] = {}
+_WARNED: set[str] = set()
+
+
+def is_available() -> bool:
+    return _BINARY.exists() and os.access(_BINARY, os.X_OK)
+
+
+def _warn_once(key: str, message: str) -> None:
+    if key not in _WARNED:
+        _WARNED.add(key)
+        print(f"GRIDLOOP native map fallback: {message}")
+
+
+def _parse_rgb(text: str, alpha: int = 255) -> tuple[int, int, int, int]:
+    vals = [int(v) for v in text.split(",")]
+    if len(vals) >= 4:
+        return vals[0], vals[1], vals[2], vals[3]
+    return vals[0], vals[1], vals[2], alpha
+
+
+def _scene(track: str, episode: int) -> dict[str, Any] | None:
+    fps = int(os.getenv("FPS", "30"))
+    frames = max(1, int(float(os.getenv("DURATION", "24")) * fps) + 8)
+    key = (track, int(episode), frames, fps)
+    if key in _CACHE:
+        return _CACHE[key]
+    if not is_available():
+        _CACHE[key] = None
+        return None
+
+    # Episode is intentionally part of the seed: a return to the same road can
+    # have slightly different natural detail without changing its visual identity.
+    seed = max(1, int(episode) * 10007 + 7919)
+    try:
+        proc = subprocess.run(
+            [str(_BINARY), track, str(seed), str(frames), str(fps)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        _warn_once(track, f"{track}: {exc}")
+        _CACHE[key] = None
+        return None
+
+    scene: dict[str, Any] = {
+        "sky_top": (100, 160, 210, 255),
+        "sky_bottom": (190, 215, 230, 255),
+        "ground": (80, 130, 75, 255),
+        "terrain": [],
+        "objects": {},
+    }
+    try:
+        for raw in proc.stdout.splitlines():
+            if not raw:
+                continue
+            parts = raw.split("|")
+            tag = parts[0]
+            if tag == "S" and len(parts) >= 3:
+                scene["sky_top"] = _parse_rgb(parts[1])
+                scene["sky_bottom"] = _parse_rgb(parts[2])
+            elif tag == "G" and len(parts) >= 2:
+                scene["ground"] = _parse_rgb(parts[1])
+            elif tag == "P" and len(parts) >= 3:
+                color = _parse_rgb(parts[1])
+                points = []
+                for pair in parts[2].split(";"):
+                    xs, ys = pair.split(",", 1)
+                    points.append((float(xs), float(ys)))
+                if len(points) >= 3:
+                    scene["terrain"].append((color, points))
+            elif tag == "O" and len(parts) >= 7:
+                frame_no = int(parts[1])
+                obj = {
+                    "kind": parts[2],
+                    "x": float(parts[3]),
+                    "y": float(parts[4]),
+                    "scale": float(parts[5]),
+                    "variant": int(parts[6]),
+                }
+                scene["objects"].setdefault(frame_no, []).append(obj)
+    except Exception as exc:
+        _warn_once(track + "-parse", f"could not parse {track} scene: {exc}")
+        _CACHE[key] = None
+        return None
+
+    _CACHE[key] = scene
+    return scene
+
+
+def has_scene(track: str, episode: int) -> bool:
+    return _scene(track, episode) is not None
+
+
+def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
+    scene = _scene(track, episode)
+    if scene is None:
+        return False
+    top = scene["sky_top"]
+    bottom = scene["sky_bottom"]
+    for y in range(0, 620, 10):
+        t = y / 620.0
+        c = tuple(int(top[i] * (1.0 - t) + bottom[i] * t) for i in range(3))
+        draw.rectangle([0, y, W, y + 10], fill=c + (255,))
+    for color, pts in scene["terrain"]:
+        draw.polygon(pts, fill=color)
+    return True
+
+
+def draw_ground(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
+    scene = _scene(track, episode)
+    if scene is None:
+        return False
+    draw.rectangle([0, 600, W, H], fill=scene["ground"])
+    # Terrain is redrawn after the ground plane. The actual race road is rendered
+    # later by renderer.py, so this remains safely behind cars and track markings.
+    for color, pts in scene["terrain"]:
+        draw.polygon(pts, fill=color)
+    return True
+
+
+def _tree(d: ImageDraw.ImageDraw, x: float, y: float, s: float, dark: bool = False) -> None:
+    trunk = (70, 50, 34, 245) if not dark else (42, 34, 29, 250)
+    leaf1 = (49, 112, 55, 248) if not dark else (24, 66, 39, 250)
+    leaf2 = (76, 145, 67, 235) if not dark else (34, 83, 47, 242)
+    d.rectangle([x-5*s, y-66*s, x+5*s, y], fill=trunk)
+    d.ellipse([x-34*s, y-116*s, x+34*s, y-49*s], fill=leaf1)
+    d.ellipse([x-27*s, y-142*s, x+28*s, y-78*s], fill=leaf2)
+
+
+def _pine(d: ImageDraw.ImageDraw, x: float, y: float, s: float, snowy: bool = False) -> None:
+    d.rectangle([x-4*s, y-58*s, x+4*s, y], fill=(63,48,36,245))
+    for n, width in enumerate((38,31,24)):
+        cy = y - (43+n*24)*s
+        d.polygon([(x,cy-39*s),(x-width*s,cy+17*s),(x+width*s,cy+17*s)], fill=(31,78,49,248))
+        if snowy:
+            d.line([(x-width*.68*s,cy+5*s),(x+width*.68*s,cy+5*s)], fill=(239,246,249,225), width=max(2,int(4*s)))
+
+
+def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
+    kind = obj["kind"]
+    x, y, s = obj["x"], obj["y"], obj["scale"]
+    v = int(obj["variant"])
+    if kind == "tree":
+        _tree(d,x,y,s*.70)
+    elif kind == "tree_dark":
+        _tree(d,x,y,s*.72,True)
+    elif kind == "pine":
+        _pine(d,x,y,s*.74,False)
+    elif kind == "pine_snow":
+        _pine(d,x,y,s*.76,True)
+    elif kind == "fence":
+        wood = (80+v*5,56+v*3,34,245)
+        d.rounded_rectangle([x-2.3*s,y-42*s,x+2.3*s,y+3*s],radius=max(1,int(1.5*s)),fill=wood)
+        d.line([(x-34*s,y-29*s),(x+34*s,y-29*s)],fill=(116,80,45,220),width=max(2,int(2.2*s)))
+        d.line([(x-34*s,y-14*s),(x+34*s,y-14*s)],fill=(142,99,56,205),width=max(2,int(1.8*s)))
+    elif kind == "rock":
+        shade=(99+v*7,88+v*5,76+v*3,238)
+        d.polygon([(x-27*s,y),(x-18*s,y-28*s),(x+7*s,y-38*s),(x+30*s,y-9*s),(x+20*s,y+4*s)],fill=shade)
+    elif kind == "cactus":
+        green=(57,105+v*3,64,242)
+        d.rounded_rectangle([x-5*s,y-75*s,x+5*s,y],radius=max(2,int(4*s)),fill=green)
+        d.line([(x-3*s,y-52*s),(x-23*s,y-52*s),(x-23*s,y-68*s)],fill=green,width=max(3,int(8*s)))
+        d.line([(x+3*s,y-39*s),(x+22*s,y-39*s),(x+22*s,y-57*s)],fill=green,width=max(3,int(8*s)))
+    elif kind in {"barrier","guardrail"}:
+        c=(206,209,204,235) if kind=="guardrail" else (220,218,205,238)
+        d.rounded_rectangle([x-38*s,y-7*s,x+38*s,y+6*s],radius=max(2,int(3*s)),fill=c)
+        if kind=="barrier":
+            d.rectangle([x-34*s,y-4*s,x-8*s,y+3*s],fill=(213,57,51,225))
+            d.rectangle([x+8*s,y-4*s,x+34*s,y+3*s],fill=(213,57,51,225))
+    elif kind == "bollard":
+        d.rounded_rectangle([x-5*s,y-37*s,x+5*s,y+2*s],radius=max(2,int(3*s)),fill=(230,226,211,238))
+        d.rectangle([x-5*s,y-27*s,x+5*s,y-20*s],fill=(216,65,54,230))
+    elif kind in {"lamp","tunnel_light"}:
+        pole=(39,44,51,242)
+        d.rectangle([x-3*s,y-82*s,x+3*s,y],fill=pole)
+        if kind=="lamp":
+            d.line([(x,y-79*s),(x+(22 if x<W/2 else -22)*s,y-79*s)],fill=pole,width=max(2,int(4*s)))
+            lx=x+(22 if x<W/2 else -22)*s
+            d.ellipse([lx-8*s,y-86*s,lx+8*s,y-72*s],fill=(255,218,126,215))
+        else:
+            d.rounded_rectangle([x-24*s,y-88*s,x+24*s,y-78*s],radius=max(2,int(3*s)),fill=(246,226,168,220))
+    elif kind == "warning":
+        d.rectangle([x-3*s,y-58*s,x+3*s,y],fill=(60,54,46,240))
+        d.polygon([(x,y-82*s),(x-24*s,y-47*s),(x+24*s,y-47*s)],fill=(255,207,57,240))
+        d.polygon([(x,y-72*s),(x-12*s,y-52*s),(x+12*s,y-52*s)],fill=(43,39,34,220))
+    elif kind == "snowbank":
+        d.ellipse([x-38*s,y-22*s,x+40*s,y+7*s],fill=(239,246,249,222))
+    elif kind == "palm":
+        d.line([(x,y),(x+5*s,y-94*s)],fill=(102,72,44,245),width=max(3,int(7*s)))
+        top=(x+5*s,y-94*s)
+        for dx,dy in ((-42,-12),(42,-12),(-32,12),(32,12),(0,-34)):
+            d.line([top,(top[0]+dx*s,top[1]+dy*s)],fill=(47,117,68,238),width=max(3,int(6*s)))
+    elif kind == "neon":
+        glow=(51,228,255,220) if v%2 else (255,61,211,220)
+        d.rectangle([x-28*s,y-55*s,x+28*s,y-42*s],fill=glow)
+        d.rectangle([x-3*s,y-42*s,x+3*s,y],fill=(41,45,53,230))
+    else:
+        d.ellipse([x-7*s,y-7*s,x+7*s,y+7*s],fill=(235,215,130,210))
+
+
+def draw_roadside(img: Image.Image, track: str, episode: int, frame_no: int) -> bool:
+    scene = _scene(track, episode)
+    if scene is None:
+        return False
+    objects = scene["objects"].get(int(frame_no), ())
+    if not objects:
+        return True
+    layer = Image.new("RGBA", (W, H), (0,0,0,0))
+    d = ImageDraw.Draw(layer, "RGBA")
+    # Farther objects first, nearer objects last, which gives natural depth.
+    for obj in sorted(objects, key=lambda x: x["y"]):
+        _draw_object(d, obj)
+    img.paste(layer, (0,0), layer)
+    return True
