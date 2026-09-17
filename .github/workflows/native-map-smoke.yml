@@ -1,0 +1,39 @@
+name: GRIDLOOP native map smoke
+
+on:
+  push:
+    paths:
+      - ".github/workflows/native-map-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FPS: "30"
+      DURATION: "24"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Compile C++ map engine
+        run: |
+          g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
+          chmod +x cpp/map_engine
+      - name: Verify native scenes and renderer bridge
+        run: |
+          python - <<'PY'
+          import native_map_runtime as native
+          assert native.is_available(), "native executable not detected"
+          for key in ("country", "mountain", "canyon", "forest"):
+              assert native.has_scene(key, 99), f"native scene failed: {key}"
+          import renderer_hybrid
+          assert renderer_hybrid._NATIVE_ACTIVE
+          print("C++ terrain + roadside scene bridge passed")
+          PY
