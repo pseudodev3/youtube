@@ -1,21 +1,22 @@
 {
   "version": 2,
-  "episode": 9,
-  "driver_skill": 0.411,
-  "road_tier": 2,
+  "episode": 10,
+  "driver_skill": 0.443,
+  "road_tier": 3,
   "car_tier": 3,
-  "wins": 4,
+  "wins": 5,
   "crashes": 2,
-  "uploads": 8,
+  "uploads": 9,
   "unlocked_roads": [
     "training",
-    "country"
+    "country",
+    "mountain"
   ],
   "last_track": "training",
-  "last_story": "pileup_escape",
-  "last_result": "target_missed",
-  "last_featured_rival": "ORANGE",
-  "last_video_id": "Du51AbDB3RM",
+  "last_story": "comeback",
+  "last_result": "target_cleared",
+  "last_featured_rival": "CYAN",
+  "last_video_id": "AR14Sp1SL3U",
   "rivals": {
     "BLUE": {
       "rivalry": 2,
@@ -60,9 +61,9 @@
     "CYAN": {
       "rivalry": 1,
       "wins_over_red": 0,
-      "losses_to_red": 2,
+      "losses_to_red": 3,
       "incidents": 3,
-      "last_featured_episode": 6,
+      "last_featured_episode": 9,
       "last_result": "red_won"
     },
     "LIME": {
@@ -170,6 +171,18 @@
       "result": "target_missed",
       "crashed": false,
       "events": 12
+    },
+    {
+      "episode": 9,
+      "video_id": "AR14Sp1SL3U",
+      "story_type": "comeback",
+      "track": "training",
+      "featured_rival": "CYAN",
+      "final_position": 4,
+      "target_position": 4,
+      "result": "target_cleared",
+      "crashed": false,
+      "events": 14
     }
   ]
 }
