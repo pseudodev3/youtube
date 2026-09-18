@@ -1,0 +1,58 @@
+name: GRIDLOOP selector metadata smoke
+
+on:
+  push:
+    paths:
+      - ".github/workflows/selector-metadata-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify Python and selector behavior
+        run: |
+          python -m py_compile metadata.py career.py main.py track_system.py
+          python - <<'PY'
+          import json
+          import random
+          from collections import Counter
+          from pathlib import Path
+
+          from metadata import build_metadata
+          from track_system import choose_track
+
+          career = json.loads(Path("career_state.json").read_text())
+          counts = Counter()
+          rng = random.Random(20260918)
+          for _ in range(2000):
+              counts[choose_track(career, rng)["key"]] += 1
+          print("track sample:", counts)
+          assert counts["training"] < counts["country"]
+          assert counts["training"] < counts["mountain"]
+
+          plan = {
+              "episode": 10,
+              "seed": 101010,
+              "featured_rival": "BLUE",
+              "story_type": "comeback",
+              "story_label": "Comeback",
+              "hook": "Red starts buried and has to claw through the pack.",
+              "target_position": 4,
+              "track": {"key": "mountain", "name": "Mountain Pass — Summit Run"},
+          }
+          telemetry = {"final_position": 3}
+          meta = build_metadata(plan, telemetry, Path("episode_010.mp4"), career=career)
+          print("title:", meta["title"])
+          print("description:", meta["description"].splitlines()[0])
+          assert "Red Had to Do This the Hard Way" not in meta["title"]
+          assert "Red starts buried" in meta["description"]
+          print("selector + metadata smoke passed")
+          PY
