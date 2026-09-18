@@ -164,15 +164,23 @@ def choose_track(career: dict, rng) -> dict:
     unlocked = unlocked_roads(skill)
     last_track = career.get("last_track")
 
-    # Bias toward recently unlocked/harder roads while still revisiting old locations.
-    weighted: list[str] = []
+    # Keep the world feeling fresh without hard-forcing a specific road.
+    # Once multiple roads are unlocked, an immediate repeat is still possible,
+    # but it becomes rare. Newer/harder unlocks get a modest discovery boost.
+    weights: list[float] = []
+    newest = unlocked[-1] if unlocked else "training"
     for idx, key in enumerate(unlocked):
-        copies = 1 + idx // 3
+        weight = 1.0 + idx * 0.22
+        if key == newest and len(unlocked) > 1:
+            weight *= 1.35
         if key == last_track and len(unlocked) > 1:
-            copies = max(1, copies - 1)
-        weighted.extend([key] * copies)
+            weight *= 0.06
+        weights.append(weight)
 
-    key = rng.choice(weighted or ["training"])
+    if unlocked:
+        key = rng.choices(unlocked, weights=weights, k=1)[0]
+    else:
+        key = "training"
     cfg = ROAD_CATALOG[key]
     variant = rng.choice(cfg["variants"])
     return {
