@@ -276,12 +276,12 @@ def main() -> None:
     plan, target, telemetry, qc = chosen
     _write_json(OUT / "telemetry.json", telemetry)
     write_qc(qc, OUT / "qc.json")
-    metadata = build_metadata(plan, telemetry, target)
+    metadata = build_metadata(plan, telemetry, target, career=career)
     write_metadata(metadata, OUT / "metadata.json")
 
     if upload_enabled():
         video_id = upload_video(target, metadata)
-        advanced = apply_uploaded_episode(career, plan, telemetry, video_id)
+        advanced = apply_uploaded_episode(career, plan, telemetry, video_id, metadata=metadata)
         save_career(advanced)
         _write_status(
             status="uploaded",
