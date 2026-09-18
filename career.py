@@ -41,6 +41,7 @@ def default_career() -> dict:
         "last_result": None,
         "last_featured_rival": None,
         "last_video_id": None,
+        "last_title": None,
         "rivals": _default_rivals(),
         "history": [],
     }
@@ -92,7 +93,13 @@ def save_career(career: dict) -> None:
         f.write("\n")
 
 
-def apply_uploaded_episode(career: dict, plan: dict, telemetry: dict, video_id: str) -> dict:
+def apply_uploaded_episode(
+    career: dict,
+    plan: dict,
+    telemetry: dict,
+    video_id: str,
+    metadata: dict | None = None,
+) -> dict:
     """Advance continuity only after YouTube returns a video id."""
     out = normalize_career(deepcopy(career))
     position = int(telemetry.get("final_position", 8))
@@ -112,6 +119,8 @@ def apply_uploaded_episode(career: dict, plan: dict, telemetry: dict, video_id: 
     out["last_track"] = plan.get("track", {}).get("key")
     out["last_featured_rival"] = plan.get("featured_rival")
     out["last_video_id"] = video_id
+    if metadata and metadata.get("title"):
+        out["last_title"] = str(metadata["title"])
 
     featured = str(plan.get("featured_rival", "BLUE"))
     rival = out["rivals"].setdefault(featured, _default_rivals().get(featured, {}))
@@ -139,6 +148,7 @@ def apply_uploaded_episode(career: dict, plan: dict, telemetry: dict, video_id: 
         "result": out["last_result"],
         "crashed": crashed,
         "events": int(telemetry.get("event_count", 0)),
+        "title": str(metadata.get("title")) if metadata and metadata.get("title") else None,
     }
     out["history"] = (list(out.get("history", [])) + [entry])[-30:]
     return normalize_career(out)
