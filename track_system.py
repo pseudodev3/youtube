@@ -155,6 +155,25 @@ ROAD_CATALOG = {
 }
 
 
+VISUAL_FAMILY = {
+    "training": "circuit",
+    "country": "rural",
+    "mountain": "mountains",
+    "night_city": "urban",
+    "rain": "circuit",
+    "coast": "coast",
+    "snow": "mountains",
+    "canyon": "canyon",
+    "desert": "desert",
+    "forest": "forest",
+    "street": "urban",
+    "tunnel": "enclosed",
+    "neon_rain": "urban",
+    "alpine": "mountains",
+    "extreme_canyon": "canyon",
+}
+
+
 def unlocked_roads(skill: float) -> list[str]:
     return [key for key, cfg in ROAD_CATALOG.items() if skill >= float(cfg["threshold"])]
 
@@ -164,23 +183,48 @@ def choose_track(career: dict, rng) -> dict:
     unlocked = unlocked_roads(skill)
     last_track = career.get("last_track")
 
-    # Keep the world feeling fresh without hard-forcing a specific road.
-    # Once multiple roads are unlocked, an immediate repeat is still possible,
-    # but it becomes rare. Newer/harder unlocks get a modest discovery boost.
+    history = [
+        str(entry.get("track"))
+        for entry in career.get("history", [])[-2:]
+        if entry.get("track") in ROAD_CATALOG
+    ]
+    recent_tracks = set(history)
+    recent_families = {VISUAL_FAMILY.get(key, key) for key in history}
+    same_recent_family = len(history) >= 2 and len(recent_families) == 1
+
+    # Prefer a different-looking world, not merely a different track id.
+    # This remains probabilistic: continuity is preserved, but visual repetition
+    # becomes increasingly unlikely when distinct unlocked environments exist.
     weights: list[float] = []
     newest = unlocked[-1] if unlocked else "training"
     for idx, key in enumerate(unlocked):
+        family = VISUAL_FAMILY.get(key, key)
         weight = 1.0 + idx * 0.22
+
+        # Recently unlocked roads deserve discovery time.
         if key == newest and len(unlocked) > 1:
             weight *= 1.35
+
+        # Never hard-ban repeats, but make back-to-back reuse genuinely rare.
         if key == last_track and len(unlocked) > 1:
-            weight *= 0.06
-        weights.append(weight)
+            weight *= 0.04
+        elif key in recent_tracks and len(unlocked) > 2:
+            weight *= 0.28
+
+        # Prefer a fresh visual family. If the last two races looked alike,
+        # amplify the pressure to move to a different kind of environment.
+        if recent_families and family not in recent_families:
+            weight *= 2.35 if same_recent_family else 1.65
+        elif family in recent_families and len({VISUAL_FAMILY.get(k, k) for k in unlocked}) > 1:
+            weight *= 0.72
+
+        weights.append(max(0.001, weight))
 
     if unlocked:
         key = rng.choices(unlocked, weights=weights, k=1)[0]
     else:
         key = "training"
+
     cfg = ROAD_CATALOG[key]
     variant = rng.choice(cfg["variants"])
     return {
