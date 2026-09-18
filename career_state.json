@@ -1,22 +1,23 @@
 {
   "version": 2,
-  "episode": 10,
-  "driver_skill": 0.443,
+  "episode": 11,
+  "driver_skill": 0.463,
   "road_tier": 3,
   "car_tier": 3,
   "wins": 5,
-  "crashes": 2,
-  "uploads": 9,
+  "crashes": 3,
+  "uploads": 10,
   "unlocked_roads": [
     "training",
     "country",
     "mountain"
   ],
-  "last_track": "training",
-  "last_story": "comeback",
-  "last_result": "target_cleared",
-  "last_featured_rival": "CYAN",
-  "last_video_id": "AR14Sp1SL3U",
+  "last_track": "mountain",
+  "last_story": "pileup_escape",
+  "last_result": "target_missed",
+  "last_featured_rival": "WHITE",
+  "last_video_id": "-1qiRTiGEy0",
+  "last_title": "Red Picked a Path Through the Wreckage | EP 10",
   "rivals": {
     "BLUE": {
       "rivalry": 2,
@@ -51,11 +52,11 @@
       "last_result": "red_won"
     },
     "WHITE": {
-      "rivalry": 3,
-      "wins_over_red": 1,
+      "rivalry": 5,
+      "wins_over_red": 2,
       "losses_to_red": 0,
-      "incidents": 1,
-      "last_featured_episode": 1,
+      "incidents": 4,
+      "last_featured_episode": 10,
       "last_result": "rival_won"
     },
     "CYAN": {
@@ -183,6 +184,19 @@
       "result": "target_cleared",
       "crashed": false,
       "events": 14
+    },
+    {
+      "episode": 10,
+      "video_id": "-1qiRTiGEy0",
+      "story_type": "pileup_escape",
+      "track": "mountain",
+      "featured_rival": "WHITE",
+      "final_position": 8,
+      "target_position": 4,
+      "result": "target_missed",
+      "crashed": true,
+      "events": 26,
+      "title": "Red Picked a Path Through the Wreckage | EP 10"
     }
   ]
 }
