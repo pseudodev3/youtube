@@ -339,10 +339,11 @@ def _schedule_tick() -> None:
     with state_lock:
         paused = bool(STATE.get("paused", True))
         attempted = STATE.get("lastAttemptedSlot")
+        completed = STATE.get("lastCompletedSlot")
     if paused or not _upload_configured() or job_lock.locked():
         return
     slot_id, _ = latest_slot()
-    if attempted == slot_id:
+    if attempted == slot_id or completed == slot_id:
         return
     start_job(slot_id, "schedule")
 
