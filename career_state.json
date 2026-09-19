@@ -1,23 +1,23 @@
 {
   "version": 2,
-  "episode": 11,
-  "driver_skill": 0.463,
+  "episode": 12,
+  "driver_skill": 0.495,
   "road_tier": 3,
   "car_tier": 3,
-  "wins": 5,
+  "wins": 6,
   "crashes": 3,
-  "uploads": 10,
+  "uploads": 11,
   "unlocked_roads": [
     "training",
     "country",
     "mountain"
   ],
-  "last_track": "mountain",
-  "last_story": "pileup_escape",
-  "last_result": "target_missed",
-  "last_featured_rival": "WHITE",
-  "last_video_id": "-1qiRTiGEy0",
-  "last_title": "Red Picked a Path Through the Wreckage | EP 10",
+  "last_track": "country",
+  "last_story": "comeback",
+  "last_result": "target_cleared",
+  "last_featured_rival": "LIME",
+  "last_video_id": "Uc6WiRwUflI",
+  "last_title": "Red Started Buried and Kept Coming | EP 11",
   "rivals": {
     "BLUE": {
       "rivalry": 2,
@@ -70,10 +70,10 @@
     "LIME": {
       "rivalry": 1,
       "wins_over_red": 0,
-      "losses_to_red": 0,
-      "incidents": 0,
-      "last_featured_episode": -999,
-      "last_result": null
+      "losses_to_red": 1,
+      "incidents": 3,
+      "last_featured_episode": 11,
+      "last_result": "red_won"
     }
   },
   "history": [
@@ -197,6 +197,19 @@
       "crashed": true,
       "events": 26,
       "title": "Red Picked a Path Through the Wreckage | EP 10"
+    },
+    {
+      "episode": 11,
+      "video_id": "Uc6WiRwUflI",
+      "story_type": "comeback",
+      "track": "country",
+      "featured_rival": "LIME",
+      "final_position": 2,
+      "target_position": 5,
+      "result": "target_cleared",
+      "crashed": false,
+      "events": 18,
+      "title": "Red Started Buried and Kept Coming | EP 11"
     }
   ]
 }
