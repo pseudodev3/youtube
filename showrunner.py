@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -9,7 +10,7 @@ from pathlib import Path
 from story_beats import build_story, choose_story_type
 from track_system import choose_track
 
-PLAN_PATH = Path("output/episode_plan.json")
+PLAN_PATH = Path(os.getenv("GRIDLOOP_OUTPUT_DIR", "output")) / "episode_plan.json"
 
 
 @dataclass
