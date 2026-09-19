@@ -18,8 +18,9 @@ from youtube_upload import upload_enabled, upload_video
 FPS = int(os.getenv("FPS", "30"))
 DURATION = float(os.getenv("DURATION", "24"))
 MAX_RENDER_ATTEMPTS = int(os.getenv("MAX_RENDER_ATTEMPTS", "3"))
-OUT = Path("output")
-OUT.mkdir(exist_ok=True)
+OUT = Path(os.getenv("GRIDLOOP_OUTPUT_DIR", "output"))
+OUT.mkdir(parents=True, exist_ok=True)
+UPLOAD_RECEIPT = OUT / "upload_receipt.json"
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -244,8 +245,47 @@ def _write_status(**payload) -> None:
     _write_json(OUT / "run_status.json", payload)
 
 
+def _recover_upload_receipt(career: dict) -> bool:
+    """Finish career advancement if a prior process died after YouTube accepted the upload."""
+    if not UPLOAD_RECEIPT.exists():
+        return False
+    with UPLOAD_RECEIPT.open("r", encoding="utf-8") as f:
+        receipt = json.load(f)
+
+    episode = int(receipt.get("episode", -1))
+    current = int(career.get("episode", 1))
+    if episode < current:
+        UPLOAD_RECEIPT.unlink(missing_ok=True)
+        return False
+    if episode != current:
+        raise RuntimeError(f"Upload receipt episode {episode} does not match career episode {current}")
+
+    video_id = str(receipt.get("video_id", "")).strip()
+    plan = receipt.get("plan")
+    telemetry = receipt.get("telemetry")
+    metadata = receipt.get("metadata")
+    if not video_id or not isinstance(plan, dict) or not isinstance(telemetry, dict):
+        raise RuntimeError("Upload receipt is incomplete; refusing to risk a duplicate upload")
+
+    advanced = apply_uploaded_episode(career, plan, telemetry, video_id, metadata=metadata if isinstance(metadata, dict) else None)
+    save_career(advanced)
+    _write_status(
+        status="uploaded_recovered",
+        episode=episode,
+        video_id=video_id,
+        next_episode=int(advanced["episode"]),
+        title=(metadata or {}).get("title") if isinstance(metadata, dict) else None,
+        track=plan.get("track", {}).get("key"),
+    )
+    UPLOAD_RECEIPT.unlink(missing_ok=True)
+    print(f"Recovered uploaded episode {episode} without uploading it twice: https://youtu.be/{video_id}")
+    return True
+
+
 def main() -> None:
     career = load_career()
+    if _recover_upload_receipt(career):
+        return
 
     # Scheduled runs stay dormant until the user adds YouTube credentials. Manual
     # workflow/run-now triggers still render complete preview artifacts for tuning.
@@ -281,6 +321,13 @@ def main() -> None:
 
     if upload_enabled():
         video_id = upload_video(target, metadata)
+        _write_json(UPLOAD_RECEIPT, {
+            "episode": int(plan["episode"]),
+            "video_id": video_id,
+            "plan": plan,
+            "telemetry": telemetry,
+            "metadata": metadata,
+        })
         advanced = apply_uploaded_episode(career, plan, telemetry, video_id, metadata=metadata)
         save_career(advanced)
         _write_status(
@@ -289,7 +336,10 @@ def main() -> None:
             video_id=video_id,
             qc_score=qc.score,
             next_episode=int(advanced["episode"]),
+            title=metadata.get("title"),
+            track=plan.get("track", {}).get("key"),
         )
+        UPLOAD_RECEIPT.unlink(missing_ok=True)
         print(f"Uploaded episode {plan['episode']}: https://youtu.be/{video_id}")
         print(f"Career advanced to episode {advanced['episode']}")
     else:
