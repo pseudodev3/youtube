@@ -25,6 +25,7 @@ CAREER_PATH = DATA_DIR / "career_state.json"
 OUTPUT_DIR = DATA_DIR / "output"
 STATE_PATH = DATA_DIR / "service_state.json"
 SEED_CAREER = ROOT / "career_state.json"
+FRESH_STATE = not STATE_PATH.exists()
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 AGENT_KEY = os.getenv("GRIDLOOP_AGENT_KEY", "").strip()
@@ -476,6 +477,16 @@ def shutdown(*_args) -> None:
 
 def main() -> None:
     _seed_career()
+    if FRESH_STATE and int(_career().get("uploads", 0) or 0) > 0:
+        # Migration safety: existing episodes were produced elsewhere before this
+        # Railway scheduler existed. Treat the current slot as already handled so
+        # first-time Resume cannot immediately create a duplicate. Use Render now
+        # explicitly if the current slot really was missed.
+        slot_id, _ = latest_slot()
+        with state_lock:
+            STATE["lastAttemptedSlot"] = slot_id
+            STATE["lastCompletedSlot"] = slot_id
+        log(f"Migration baseline set at {slot_id}; next automatic run is the following slot.")
     _save_state()
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
