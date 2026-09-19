@@ -18,6 +18,9 @@ from youtube_upload import upload_enabled, upload_video
 FPS = int(os.getenv("FPS", "30"))
 DURATION = float(os.getenv("DURATION", "24"))
 MAX_RENDER_ATTEMPTS = int(os.getenv("MAX_RENDER_ATTEMPTS", "3"))
+FFMPEG_PRESET = os.getenv("GRIDLOOP_FFMPEG_PRESET", "veryfast").strip() or "veryfast"
+FFMPEG_CRF = int(os.getenv("GRIDLOOP_FFMPEG_CRF", "18"))
+FFMPEG_THREADS = max(1, int(os.getenv("GRIDLOOP_FFMPEG_THREADS", "2")))
 OUT = Path(os.getenv("GRIDLOOP_OUTPUT_DIR", "output"))
 OUT.mkdir(parents=True, exist_ok=True)
 UPLOAD_RECEIPT = OUT / "upload_receipt.json"
@@ -63,8 +66,9 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     video_only = OUT / f"episode_{episode:03d}.video.mp4"
     audio_path = OUT / f"episode_{episode:03d}.wav"
 
+    ffmpeg_log = OUT / f"ffmpeg_episode_{episode:03d}.log"
     cmd = [
-        "ffmpeg", "-y",
+        "ffmpeg", "-y", "-hide_banner",
         "-f", "rawvideo",
         "-vcodec", "rawvideo",
         "-pix_fmt", "rgb24",
@@ -73,14 +77,16 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         "-i", "-",
         "-an",
         "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "17",
+        "-preset", FFMPEG_PRESET,
+        "-crf", str(FFMPEG_CRF),
+        "-threads", str(FFMPEG_THREADS),
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         str(video_only),
     ]
 
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    ffmpeg_stderr = ffmpeg_log.open("w", encoding="utf-8")
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=ffmpeg_stderr)
     total = int(DURATION * FPS)
     speeds: list[float] = []
     crash_flags: list[bool] = []
@@ -165,14 +171,29 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
             frame = render_frame(rf, episode=episode, skill=skill, frame_no=i)
             if not proc.stdin:
                 raise RuntimeError("ffmpeg stdin closed unexpectedly")
-            proc.stdin.write(frame.tobytes())
+            try:
+                proc.stdin.write(frame.tobytes())
+            except BrokenPipeError:
+                break
     finally:
         if proc.stdin:
-            proc.stdin.close()
+            try:
+                proc.stdin.close()
+            except BrokenPipeError:
+                pass
         code = proc.wait()
+        ffmpeg_stderr.close()
 
     if code != 0:
-        raise RuntimeError(f"ffmpeg video render failed with exit code {code}")
+        try:
+            raw_error = ffmpeg_log.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            raw_error = ""
+        tail = "\n".join(raw_error.splitlines()[-18:]).strip()
+        if tail:
+            print("FFMPEG FAILURE:\n" + tail)
+        compact = " | ".join(tail.splitlines()[-5:])[:1200] if tail else "no ffmpeg diagnostics captured"
+        raise RuntimeError(f"ffmpeg video encoder exited with code {code}: {compact}")
     if last_frame is None:
         raise RuntimeError("race engine produced zero frames")
 
@@ -354,4 +375,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as exc:
+        try:
+            _write_status(status="error", reason=str(exc)[:1600])
+        except Exception:
+            pass
+        raise
