@@ -236,8 +236,10 @@ def _finish_job(slot_id: str, trigger: str, code: int) -> None:
     run_status = _read_json(OUTPUT_DIR / "run_status.json")
     metadata = _read_json(OUTPUT_DIR / "metadata.json")
     success = code == 0 and run_status.get("status") in {"uploaded", "uploaded_recovered"}
-    repo_sync = sync_career_to_github() if success else None
 
+    # Persist the completed slot before any optional external backup. If a GitHub
+    # backup commit causes Railway to redeploy, the restarted worker still knows
+    # this slot is finished and will not upload it again.
     with state_lock:
         STATE["lastFinished"] = datetime.now(timezone.utc).isoformat()
         STATE["lastStatus"] = "uploaded" if success else "failed"
@@ -252,6 +254,10 @@ def _finish_job(slot_id: str, trigger: str, code: int) -> None:
             STATE["lastTrack"] = run_status.get("track") or metadata.get("track")
             if not slot_id.startswith("manual:"):
                 STATE["lastCompletedSlot"] = slot_id
+    _save_state()
+
+    repo_sync = sync_career_to_github() if success else None
+    with state_lock:
         STATE["lastRepoSync"] = repo_sync
     _save_state()
     _prune_output()
