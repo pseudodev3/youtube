@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 
 from track_system import unlocked_roads
 
-CAREER_PATH = Path("career_state.json")
-LEGACY_STATE_PATH = Path("state.json")
+CAREER_PATH = Path(os.getenv("CAREER_PATH", "career_state.json"))
+LEGACY_STATE_PATH = Path(os.getenv("LEGACY_STATE_PATH", "state.json"))
 DRIVERS = ["BLUE", "GREEN", "ORANGE", "PURPLE", "WHITE", "CYAN", "LIME"]
 
 
@@ -88,6 +89,7 @@ def load_career() -> dict:
 
 def save_career(career: dict) -> None:
     career = normalize_career(career)
+    CAREER_PATH.parent.mkdir(parents=True, exist_ok=True)
     with CAREER_PATH.open("w", encoding="utf-8") as f:
         json.dump(career, f, indent=2)
         f.write("\n")
