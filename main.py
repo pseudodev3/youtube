@@ -19,7 +19,7 @@ FPS = int(os.getenv("FPS", "30"))
 DURATION = float(os.getenv("DURATION", "24"))
 MAX_RENDER_ATTEMPTS = int(os.getenv("MAX_RENDER_ATTEMPTS", "3"))
 FFMPEG_PRESET = os.getenv("GRIDLOOP_FFMPEG_PRESET", "veryfast").strip() or "veryfast"
-FFMPEG_CRF = int(os.getenv("GRIDLOOP_FFMPEG_CRF", "18"))
+FFMPEG_CRF = int(os.getenv("GRIDLOOP_FFMPEG_CRF", "17"))
 FFMPEG_THREADS = max(1, int(os.getenv("GRIDLOOP_FFMPEG_THREADS", "2")))
 OUT = Path(os.getenv("GRIDLOOP_OUTPUT_DIR", "output"))
 OUT.mkdir(parents=True, exist_ok=True)
