@@ -29,9 +29,9 @@ Attach a Railway volume and configure:
 - `YOUTUBE_UPLOAD_ENABLED=true`
 - `YOUTUBE_PRIVACY_STATUS=public`
 
-Optional but recommended:
+Optional backup:
 
-- `GRIDLOOP_GITHUB_TOKEN` — fine-grained token for **pseudodev3/youtube** with Contents read/write. After a successful upload the worker backs up `career_state.json` to the repository. This does not use GitHub Actions minutes.
+- `GRIDLOOP_GITHUB_TOKEN` — fine-grained token for **pseudodev3/youtube** with Contents read/write. After a successful upload the worker backs up `career_state.json` to the repository. This does not use GitHub Actions minutes. If Railway auto-deploys on every repo commit, leave this unset unless a post-upload redeploy is acceptable.
 
 The worker defaults to **09:17 and 21:17 WAT**. It starts paused on a fresh volume. Resume it from the GRIDLOOP card in Ghost OS after confirming the credentials.
 
