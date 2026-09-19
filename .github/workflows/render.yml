@@ -1,12 +1,8 @@
 name: GRIDLOOP production episode
 
 on:
+  # Railway is the primary scheduler. Keep this as an emergency manual fallback only.
   workflow_dispatch:
-  push:
-    paths:
-      - ".github/run-now"
-  schedule:
-    - cron: "17 * * * *"
 
 permissions:
   contents: write
