@@ -306,6 +306,9 @@ def _run_job(slot_id: str, trigger: str) -> None:
                     or "GRIDLOOP map engine" in text
                     or "Recovered uploaded" in text
                     or "Traceback" in text
+                    or "FFMPEG FAILURE" in text
+                    or "Conversion failed" in text
+                    or "Killed" in text
                     or "Error" in text
                     or "RuntimeError" in text
                 ):
