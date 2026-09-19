@@ -1,6 +1,6 @@
 # GRIDLOOP production
 
-The repository now runs as a deterministic procedural racing show rather than a one-off renderer.
+The repository runs as a deterministic procedural racing show rather than a one-off renderer.
 
 ## Runtime
 
@@ -9,33 +9,44 @@ The repository now runs as a deterministic procedural racing show rather than a 
 3. `story_beats.py` supplies reusable story structures.
 4. `track_system.py` selects an unlocked road and variant.
 5. `race_engine.py` executes the plan physically.
-6. `renderer.py` and `audio.py` render the episode with adaptive music.
-7. `quality_control.py` checks the finished Short. A failed episode rerenders with another deterministic seed, up to `MAX_RENDER_ATTEMPTS`.
-8. `metadata.py` writes story-aware YouTube metadata.
-9. `youtube_upload.py` uploads the accepted episode.
-10. Only after YouTube returns a video id does `career.py` advance `career_state.json`.
+6. `renderer_hybrid.py` combines the Python renderer with the native C++ map engine.
+7. `audio.py` renders adaptive music and effects.
+8. `quality_control.py` checks the finished Short. A failed episode rerenders with another deterministic seed, up to `MAX_RENDER_ATTEMPTS`.
+9. `metadata.py` writes story-aware YouTube metadata.
+10. `youtube_upload.py` uploads the accepted episode.
+11. Only after YouTube returns a video id does `career.py` advance career state.
 
-## Required GitHub Actions secrets
+## Primary production: Railway
 
-Add these under **Repository Settings → Secrets and variables → Actions → New repository secret**:
+`gridloop_service.py` is the production scheduler and Ghost OS control target. The included `Dockerfile` installs FFmpeg, fonts and g++, compiles `cpp/map_engine.cpp`, and starts the worker.
 
+Attach a Railway volume and configure:
+
+- `GRIDLOOP_AGENT_KEY` — 32+ character control secret.
 - `YOUTUBE_CLIENT_ID`
 - `YOUTUBE_CLIENT_SECRET`
 - `YOUTUBE_REFRESH_TOKEN`
+- `YOUTUBE_UPLOAD_ENABLED=true`
+- `YOUTUBE_PRIVACY_STATUS=public`
 
-The workflow automatically treats the pipeline as preview-only until all three secrets exist. Manual runs still render artifacts. Scheduled runs remain dormant without credentials.
+Optional but recommended:
+
+- `GRIDLOOP_GITHUB_TOKEN` — fine-grained token for **pseudodev3/youtube** with Contents read/write. After a successful upload the worker backs up `career_state.json` to the repository. This does not use GitHub Actions minutes.
+
+The worker defaults to **09:17 and 21:17 WAT**. It starts paused on a fresh volume. Resume it from the GRIDLOOP card in Ghost OS after confirming the credentials.
+
+Persistent state lives on the Railway volume. If the worker restarts after YouTube accepts an upload but before career advancement finishes, `upload_receipt.json` allows the next process to finish the career transaction without deliberately uploading the episode again.
 
 ## Safe behavior
 
-- QC failure: no upload, no career advance.
+- QC failure: no upload and no career advance.
 - YouTube failure: no career advance.
-- Missing YouTube secrets: manual preview works, scheduled run skips.
-- Successful upload: `career_state.json` advances and is committed with `[skip ci]`.
+- Successful upload: persistent career state advances only after a non-empty YouTube video id.
+- Duplicate schedule protection: each morning/evening slot is attempted once automatically.
+- Worker restart: the latest missed slot is eligible after the service returns.
+- Manual **Render now**: available through Ghost OS and rejected while another render is active.
+- GitHub backup failure: the uploaded career remains safe on the Railway volume; repo sync failure is reported separately.
 
-## Triggering a preview
+## GitHub Actions fallback
 
-Update `.github/run-now` or run the `GRIDLOOP production episode` workflow manually. The artifact contains the MP4, episode plan, telemetry, metadata, QC report and run status.
-
-## Schedule
-
-The production workflow currently runs daily at `08:17 UTC` once YouTube credentials are configured.
+`.github/workflows/render.yml` is now **manual-only**. It remains available as an emergency fallback when Actions minutes are available, but it is no longer the production scheduler. Normal production should run through Railway.
