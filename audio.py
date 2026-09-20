@@ -260,6 +260,10 @@ def synthesize_audio(
                 rain_hiss_r = rng.uniform(-1.0, 1.0) * (0.030 if track_key == "rain" else 0.025)
                 ambience_l += rain_hiss_l + ambience_lp_l * 0.012
                 ambience_r += rain_hiss_r + ambience_lp_r * 0.012
+                if track_key == "neon_rain":
+                    neon_hum = math.sin(ambience_phase * 1.31) * 0.010
+                    ambience_l += neon_hum
+                    ambience_r += neon_hum
             elif track_key == "tunnel":
                 hum = math.sin(ambience_phase) * 0.020 + math.sin(ambience_phase2) * 0.009
                 ambience_l += hum + ambience_lp_l * 0.008
@@ -268,10 +272,6 @@ def synthesize_audio(
                 hum = math.sin(ambience_phase * 1.17) * 0.010
                 ambience_l += hum + ambience_lp_l * 0.010
                 ambience_r += hum + ambience_lp_r * 0.010
-            elif track_key == "neon_rain":
-                hum = math.sin(ambience_phase * 1.31) * 0.010
-                ambience_l += hum
-                ambience_r += hum
             elif track_key == "coast":
                 swell = math.sin(math.tau * 0.22 * t) * 0.008
                 ambience_l += ambience_lp_l * 0.020 + swell
