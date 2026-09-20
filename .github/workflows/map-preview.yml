@@ -56,7 +56,7 @@ jobs:
         run: |
           g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
           chmod +x cpp/map_engine
-          for track in training country mountain canyon night_city coast forest desert; do
+          for track in training country mountain night_city rain coast snow canyon desert forest street tunnel neon_rain alpine extreme_canyon; do
             ./cpp/map_engine "$track" 120001 4 24 > "/tmp/$track.txt"
             grep -q '^S|' "/tmp/$track.txt"
             grep -q '^P|' "/tmp/$track.txt"
@@ -72,7 +72,7 @@ jobs:
           print("Upload disabled: preview workflow is safe.")
           PY
 
-      - name: Render four controlled map previews
+      - name: Render complete controlled map catalogue
         run: python tools/render_map_previews.py
 
       - name: Verify career state was untouched
