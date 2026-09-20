@@ -116,6 +116,50 @@ jobs:
               print("Audio V2 matrix passed for all 15 maps.")
           PY
 
+      - name: Stress test non-repeating captions
+        run: |
+          python - <<'PY'
+          import random
+          from captioning import CaptionDirector, caption_hash, runtime_candidates
+          from story_beats import STORY_TEMPLATES, build_story
+
+          used = set()
+          story_types = list(STORY_TEMPLATES)
+          rivals = ["BLUE","GREEN","ORANGE","PURPLE","WHITE","CYAN","LIME"]
+
+          for episode in range(1, 301):
+              story_type = story_types[(episode - 1) % len(story_types)]
+              rival = rivals[(episode * 3) % len(rivals)]
+              seed = episode * 10007 + 7919
+              story = build_story(
+                  story_type,
+                  rival,
+                  random.Random(seed),
+                  duration=24.0,
+                  episode=episode,
+                  seed=seed,
+                  used_caption_hashes=used,
+              )
+              lines = [story["hook"]] + [b["caption"] for b in story["beats"]]
+              assert len(lines) == len(set(lines)), (episode, lines)
+              for line in lines:
+                  h = caption_hash(line)
+                  assert h not in used, (episode, line)
+                  used.add(h)
+
+              director = CaptionDirector(seed ^ 0xCAFE, episode, used)
+              for raw in (
+                  "RED GETS ONE!", "COUNTERSTEER!", "HUGE HIT! 💥",
+                  "WHEEL TO WHEEL!", "RED'S BACK!", "TARGET CLEARED! P4 🔥",
+              ):
+                  line = director.fresh(runtime_candidates(raw), category=f"stress:{raw}")
+                  h = caption_hash(line)
+                  assert h not in used, (episode, line)
+                  used.add(h)
+
+          print(f"Caption endurance passed: {len(used)} unique lines across 300 simulated episodes.")
+          PY
+
       - name: Run full production stack
         env:
           GITHUB_EVENT_NAME: production_dry_run
@@ -143,6 +187,9 @@ jobs:
           assert telemetry["starting_cars"] == 8
           assert telemetry["event_count"] >= 3
           assert telemetry["has_final_result"] is True
+          captions = [x for x in telemetry.get("captions_used", []) if x]
+          assert captions, "caption telemetry missing"
+          assert len(captions) == len(set(captions)), captions
           assert metadata["privacy_status"] == "public" or metadata["privacy_status"] == "private"
           assert list(out.glob("episode_*.mp4")), "final MP4 missing"
 
