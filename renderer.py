@@ -10,6 +10,24 @@ HORIZON = 560
 ROAD_BOTTOM = 980
 
 
+def _video_caption_text(text: str) -> str:
+    # DejaVu is deliberately bundled everywhere we render, but it does not
+    # contain color emoji glyphs. Keep metadata expressive while ensuring video
+    # captions never show tofu/missing-glyph squares.
+    return (
+        str(text)
+        .replace("🔥", "")
+        .replace("😭", "")
+        .replace("💀", "")
+        .replace("😤", "")
+        .replace("😳", "")
+        .replace("😈", "")
+        .replace("🤯", "")
+        .replace("🚨", "")
+        .strip()
+    )
+
+
 def _font(size: int, bold: bool = False):
     candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -484,7 +502,7 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
 
     if frame.event_text:
         # Race beats should read like broadcast captions, not modal UI.
-        text=frame.event_text
+        text=_video_caption_text(frame.event_text)
         event_font=_font(48,True)
         box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
         if tw>880:
