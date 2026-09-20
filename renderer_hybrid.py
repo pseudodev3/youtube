@@ -110,7 +110,7 @@ def _decorate(img, frame, frame_no: int):
     out = _ORIG_DECORATE(img, frame, frame_no)
     if _NATIVE_ACTIVE:
         key = enhanced._road_key(frame)
-        native.draw_roadside(out, key, _episode(), frame_no)
+        native.draw_roadside(out, key, _episode(), frame_no, frame=frame)
     return out
 
 
