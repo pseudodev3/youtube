@@ -25,7 +25,7 @@ from main import render_video
 from showrunner import plan_episode
 from track_system import ROAD_CATALOG
 
-TRACKS = ("training", "country", "mountain", "canyon")
+TRACKS = ("training", "country", "mountain", "canyon", "night_city", "coast", "forest", "desert")
 OUT = Path(os.environ["GRIDLOOP_OUTPUT_DIR"])
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -87,7 +87,8 @@ def main() -> None:
 
     # One phone-sized 2x2 sheet makes "do these feel like different worlds?"
     # immediately reviewable without scrubbing four videos.
-    sheet = Image.new("RGB", (1080, 1920), (18, 20, 21))
+    rows = (len(TRACKS) + 1) // 2
+    sheet = Image.new("RGB", (1080, rows * 960), (18, 20, 21))
     font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
     font = ImageFont.truetype(str(font_path), 28) if font_path.exists() else ImageFont.load_default()
     for index, key in enumerate(TRACKS):
