@@ -184,16 +184,22 @@ _OBJECT_HALF_WIDTH = {
 }
 
 
-def _road_safe_x(frame, obj: dict[str, Any]) -> float:
-    """Place a native roadside prop outside the live curved road + shoulder."""
+def _road_safe_pose(frame, obj: dict[str, Any]) -> tuple[float, float]:
+    """Project a native prop using the same perspective depth as the live road."""
     if frame is None:
-        return float(obj["x"])
+        return float(obj["x"]), float(obj["y"])
 
     side = -1.0 if float(obj["x"]) < W / 2 else 1.0
-    y = float(obj["y"])
-    horizon = 600.0 + float(getattr(frame, "shake", 0.0)) * 1.2
-    depth = max(0.0, min(1.0, (y - horizon) / max(1.0, H - horizon)))
-    p = depth ** (1.0 / 1.72)
+
+    # C++ encodes perspective depth into scale as 0.28 + p*1.15. Recovering p
+    # from scale is exact and avoids mixing the old roadside y projection with
+    # renderer.py's road projection.
+    scale = float(obj.get("scale", 1.0))
+    p = max(0.0, min(1.0, (scale - 0.28) / 1.15))
+
+    shake = float(getattr(frame, "shake", 0.0))
+    horizon = 600.0 + shake * 1.2
+    projected_y = horizon + (p ** 1.72) * (H - horizon)
 
     road_curve = float(getattr(frame, "road_curve", 0.0))
     road_curve_far = float(getattr(frame, "road_curve_far", 0.0))
@@ -206,15 +212,18 @@ def _road_safe_x(frame, obj: dict[str, Any]) -> float:
         + math.sin(t * 0.14 + p * 3.0) * 50 * p
         + heading * 18
     )
+
     width_mul = float(getattr(frame, "road_width", 0.82)) / 0.82
     half_road = (65 + (p ** 1.28) * 980) * width_mul
     shoulder = 28 + p * 30
-
-    scale = float(obj.get("scale", 1.0))
     radius = _OBJECT_HALF_WIDTH.get(str(obj.get("kind")), 30) * scale
-    safety = 18 + 22 * p
-    jitter = (int(obj.get("variant", 0)) % 3) * 8 * scale
-    return center + side * (half_road + shoulder + radius + safety + jitter)
+
+    # Near-camera props get more breathing room. A baseline 30px also absorbs
+    # camera punch from collisions that is intentionally not part of map data.
+    safety = 30 + 30 * p
+    jitter = (int(obj.get("variant", 0)) % 3) * 9 * scale
+    projected_x = center + side * (half_road + shoulder + radius + safety + jitter)
+    return projected_x, projected_y
 
 
 def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
@@ -372,7 +381,7 @@ def draw_roadside(
     # Farther objects first, nearer objects last, which gives natural depth.
     for original in sorted(objects, key=lambda x: x["y"]):
         obj = dict(original)
-        obj["x"] = _road_safe_x(frame, obj)
+        obj["x"], obj["y"] = _road_safe_pose(frame, obj)
         s = float(obj.get("scale", 1.0))
         if obj["x"] < -140 * s or obj["x"] > W + 140 * s:
             continue
