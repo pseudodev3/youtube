@@ -201,7 +201,18 @@ GENERIC_VERBS = [
 GENERIC_TAILS = [
     "RIGHT HERE", "UNDER PRESSURE", "WITH NO ROOM", "AT FULL SEND",
     "ON THE LIMIT", "IN TRAFFIC", "THROUGH THE NEXT MOVE", "WITH EVERYTHING MOVING",
-    "IN THE FIGHT", "WITH RED STILL IN IT",
+    "IN THE FIGHT", "WITH RED STILL IN IT", "IN THE BRAKING ZONE",
+    "THROUGH THE CHAOS", "AT THE EDGE", "WITH THE PACK CLOSE",
+    "BEFORE THE NEXT CORNER", "WITH NO TIME TO WAIT", "WHILE THE GAP IS OPEN",
+    "WITH EVERYTHING ON THE LINE",
+]
+
+GENERIC_FINISHES = [
+    "", "AGAIN", "THIS TIME", "ONE MORE TIME", "WITHOUT LIFTING",
+    "AND RED STAYS IN IT", "AND THE PACK RESPONDS", "WITH NO EASY EXIT",
+    "BEFORE IT CLOSES", "AS THE ROAD TIGHTENS", "WITH THE FIELD ATTACHED",
+    "AND NOBODY BACKS OUT", "WHILE THE PRESSURE BUILDS", "AT RACE SPEED",
+    "WITH THE NEXT MOVE COMING", "AND IT STILL ISN'T SETTLED",
 ]
 
 
@@ -301,21 +312,38 @@ class CaptionDirector:
 
         # Combinatorial grammar makes the bank effectively inexhaustible.
         start = self.counter + self.episode * 17
-        total = len(GENERIC_LEADS) * len(GENERIC_VERBS) * len(GENERIC_TAILS)
+        total = (
+            len(GENERIC_LEADS)
+            * len(GENERIC_VERBS)
+            * len(GENERIC_TAILS)
+            * len(GENERIC_FINISHES)
+        )
+        stride = 7919  # prime, giving a long deterministic walk through the grammar space
         for offset in range(total):
-            idx = (start + offset * 37) % total
-            a = GENERIC_LEADS[idx % len(GENERIC_LEADS)]
-            b = GENERIC_VERBS[(idx // len(GENERIC_LEADS)) % len(GENERIC_VERBS)]
-            c = GENERIC_TAILS[(idx // (len(GENERIC_LEADS) * len(GENERIC_VERBS))) % len(GENERIC_TAILS)]
-            text = f"{a} {b} {c}"
+            idx = (start + offset * stride) % total
+            lead_n = len(GENERIC_LEADS)
+            verb_n = len(GENERIC_VERBS)
+            tail_n = len(GENERIC_TAILS)
+            a = GENERIC_LEADS[idx % lead_n]
+            b = GENERIC_VERBS[(idx // lead_n) % verb_n]
+            tail_index = (idx // (lead_n * verb_n)) % tail_n
+            finish_index = (idx // (lead_n * verb_n * tail_n)) % len(GENERIC_FINISHES)
+            c = GENERIC_TAILS[tail_index]
+            finish = GENERIC_FINISHES[finish_index]
+            text = f"{a} {b} {c}" + (f" {finish}" if finish else "")
             if self._available(text):
                 self.reserve(text)
                 self.counter += offset + 1
                 return text
 
-        # This path is only reachable after exhausting hundreds of grammatical
-        # combinations plus every authored bank. Episode identity guarantees the
-        # final fallback can still never repeat exactly.
-        text = f"THE FIGHT KEEPS MOVING — RACE {self.episode}"
+        # Absolute safety valve. Reaching this means exhausting the authored
+        # banks plus the entire combinatorial grammar. Race + moment identity
+        # still makes the line globally unique instead of repeating or failing.
+        moment = self.counter + 1
+        text = f"THE FIGHT FINDS ANOTHER MOMENT — RACE {self.episode} / {moment}"
+        while not self._available(text):
+            moment += 1
+            text = f"THE FIGHT FINDS ANOTHER MOMENT — RACE {self.episode} / {moment}"
         self.reserve(text)
+        self.counter = moment
         return text
