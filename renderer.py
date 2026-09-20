@@ -427,8 +427,12 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 10.0
             contact_angle=rival.contact_side*rival.contact_strength*amp*math.sin(frame.t*44.0)
 
+        braking_states={"panic","brake_check","avoid_crash","late_react","aftermath","recover"}
+        rival_brake=1.0 if rival.behavior in {"panic","brake_check","avoid_crash"} else .62 if rival.behavior in braking_states else 0.0
+        rival_load=-.72 if rival.behavior in {"panic","brake_check","avoid_crash"} else -.36 if rival.behavior in braking_states else .28 if rival.behavior=="divebomb" else 0.0
+
         if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:
-            _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
+            _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
             d=ImageDraw.Draw(img,"RGBA")
             smoke_count=18 if rival.behavior=="big_spin" else 13 if rival.behavior=="aftermath" else 8
             for _ in range(smoke_count):
@@ -443,19 +447,16 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
                 d.line([(x-38*scale,y+55*scale),(x-rival.slide_velocity*9000,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
                 d.line([(x+38*scale,y+55*scale),(x-rival.slide_velocity*9000+76*scale,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
         elif rival.contact_timer>0:
-            _rotated_car(img,x,y,scale,contact_angle,False,rival.color)
+            _rotated_car(img,x,y,scale,contact_angle,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
             d=ImageDraw.Draw(img,"RGBA")
         else:
-            _car(d,x,y,scale,rival.heading,False,rival.color)
+            _car(d,x,y,scale,rival.heading,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
 
         if rival.contact_timer>0:
             _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_impact_debris(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
 
-        if rival.behavior in {"panic","brake_check","avoid_crash"}:
-            s=scale
-            d.ellipse([x-40*s,y+62*s,x-20*s,y+80*s],fill=(255,65,45,240)); d.ellipse([x+20*s,y+62*s,x+40*s,y+80*s],fill=(255,65,45,240))
         if (rival.behavior!="normal" or rival.name==frame.featured_rival) and p>.28:
             text=rival.name; bb=d.textbbox((0,0),text,font=tiny); tw=bb[2]-bb[0]; ty=y-125*scale
             outline=(255,220,95,220) if rival.name==frame.featured_rival else (255,255,255,35)
@@ -467,16 +468,22 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     px=pcenter+frame.player.lane*phalf*.68
 
     drift_angle_deg=frame.player.drift_angle*54.0
+    drift_visual=max(0.0,min(1.0,max(abs(frame.player.drift_slip)/.0088,abs(frame.player.drift_angle)/.52)))
     if frame.player.drifting:
         slip_dir=1 if frame.player.drift_slip>0 else -1
+        particle_count=6+int(12*drift_visual)
         for local_x,local_y in [(-56,72),(56,72)]:
             rx,ry=_rotate_point(local_x,local_y,drift_angle_deg); tx,ty=px+rx,py+ry
-            for n in range(10):
-                trail=18+n*17+rng.uniform(-5,5); sx=tx-slip_dir*trail*.55+rng.uniform(-10,10); sy=ty+trail+rng.uniform(-7,7)
-                r=10+n*.9+rng.uniform(0,7)
-                d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,max(18,78-n*5)))
-            d.line([(tx,ty),(tx-slip_dir*115,ty+235)],fill=(15,15,17,125),width=10)
-        d.line([(px,py+90),(px-slip_dir*150,py+280)],fill=(255,255,255,28),width=4)
+            for n in range(particle_count):
+                trail=18+n*(14+5*drift_visual)+rng.uniform(-5,5)
+                sx=tx-slip_dir*trail*(.46+.18*drift_visual)+rng.uniform(-10,10)
+                sy=ty+trail+rng.uniform(-7,7)
+                r=8+n*.75+rng.uniform(0,5+4*drift_visual)
+                alpha=max(14,int(46+50*drift_visual-n*3.8))
+                d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,alpha))
+            skid_alpha=int(80+65*drift_visual)
+            d.line([(tx,ty),(tx-slip_dir*(90+55*drift_visual),ty+205+45*drift_visual)],fill=(15,15,17,skid_alpha),width=max(7,int(8+4*drift_visual)))
+        d.line([(px,py+90),(px-slip_dir*(115+55*drift_visual),py+245+45*drift_visual)],fill=(255,255,255,int(18+20*drift_visual)),width=4)
     elif abs(frame.player.heading)>.15 or frame.player.crashed:
         for side in (-1,1):
             sx=px+side*54
@@ -493,8 +500,13 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 10.5
         player_contact_angle=frame.player.contact_side*frame.player.contact_strength*amp*math.sin(frame.t*42.0)
 
+    player_load=max(-1.0,min(1.0,float(getattr(frame,"player_longitudinal_g",0.0))))
+    player_brake=max(0.0,min(1.0,-player_load*1.25))
+    if frame.player.crashed:
+        player_brake=max(player_brake,.82)
+
     if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
-        _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
         for _ in range(18):
             rr=rng.uniform(10,28); sx=px+rng.uniform(-72,72); sy=py+rng.uniform(42,165)
             d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(38,96)))
@@ -502,11 +514,11 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             ox=rng.uniform(-72,72); oy=rng.uniform(45,145); rr=rng.uniform(2,5)
             d.rectangle([px+ox-rr,py+oy-rr,px+ox+rr,py+oy+rr],fill=rng.choice([(45,45,48,155),(105,108,112,140),(246,172,65,150)]))
     elif frame.player.drifting and abs(frame.player.drift_angle)>.08:
-        _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
     elif frame.player.contact_timer>0:
-        _rotated_car(img,px,py,1.15,player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
     else:
-        _car(d,px,py,1.15,frame.player.heading,True,0)
+        _car(d,px,py,1.15,frame.player.heading,True,0,longitudinal_load=player_load,braking=player_brake)
 
     if frame.player.contact_timer>0:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
