@@ -73,6 +73,24 @@ static Poly peaks(double width, double base, double min_top, double max_top, int
     return p;
 }
 
+static Poly ridge(double width, double base, double min_top, double max_top, int count, Color c, std::mt19937_64& rng) {
+    Poly p{c,{}};
+    p.pts.push_back({0, 900});
+    p.pts.push_back({0, base});
+    std::uniform_real_distribution<double> peak(min_top, max_top);
+    std::uniform_real_distribution<double> saddle(base-82.0, base-28.0);
+    for (int i = 0; i < count; ++i) {
+        double x0 = width * i / count;
+        double x1 = width * (i + 1) / count;
+        double cx = x0 + (x1-x0) * (0.38 + (rng()%25)/100.0);
+        p.pts.push_back({x0, saddle(rng)});
+        p.pts.push_back({cx, peak(rng)});
+        p.pts.push_back({x1, saddle(rng)});
+    }
+    p.pts.push_back({width, 900});
+    return p;
+}
+
 struct Style { Color sky0, sky1, ground; };
 
 static Style style_for(const std::string& k) {
@@ -125,14 +143,19 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
         out.push_back({{203,205,181,245},{{210,544},{228,523},{246,544}}});
         out.push_back(rect(742,565,836,624,{126,83,48,242}));
         out.push_back({{91,58,40,242},{{728,565},{789,528},{850,565}}});
+        // Thin distant hedgerow + pale field lane adds depth without turning green again.
+        out.push_back(rolling(W,590,9,5.5,0.6,{74,102,52,235}));
+        out.push_back(rect(475,585,650,592,{226,211,159,205}));
     } else if (k=="mountain") {
-        // Cold, high-altitude rock world with near cliff faces and snow traces.
-        out.push_back(peaks(W,692,220,410,6,{55,61,66,255},rng));
-        out.push_back(peaks(W,735,350,520,7,{94,99,102,248},rng));
-        out.push_back({{48,52,55,255},{{0,440},{150,385},{225,515},{182,690},{0,840}}});
-        out.push_back({{52,55,58,255},{{1080,420},{940,370},{855,500},{900,690},{1080,835}}});
-        out.push_back({{223,230,232,232},{{235,365},{285,275},{335,365},{300,342},{285,315},{270,345}}});
-        out.push_back({{231,236,237,226},{{718,342},{775,245},{830,355},{792,330},{774,290},{754,332}}});
+        // Cold layered ridges: broad silhouettes instead of the old saw-tooth triangles.
+        out.push_back(ridge(W,690,250,390,5,{70,79,85,230},rng));
+        out.push_back(ridge(W,735,335,505,5,{50,57,62,255},rng));
+        out.push_back({{43,47,50,255},{{0,455},{112,405},{180,482},{228,603},{170,735},{0,858}}});
+        out.push_back({{47,50,53,255},{{1080,438},{968,392},{900,470},{854,598},{910,730},{1080,850}}});
+        // Snow streaks sit on only a few summits so the pass stays rocky, not alpine-white.
+        out.push_back({{229,235,237,226},{{238,390},{286,292},{330,392},{304,365},{286,330},{267,370}}});
+        out.push_back({{235,239,240,218},{{706,374},{766,268},{825,386},{795,350},{765,309},{742,354}}});
+        out.push_back({{200,210,213,150},{{490,470},{535,386},{578,474},{553,454},{535,420},{520,455}}});
     } else if (k=="night_city" || k=="neon_rain") {
         Color body = k=="neon_rain" ? Color{15,18,29,255} : Color{20,25,34,255};
         std::uniform_int_distribution<int> hh(120,300);
@@ -167,8 +190,14 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
         double inset = ex ? 290 : 215;
         out.push_back({left,{{0,135},{inset,225},{inset-65,430},{inset+20,610},{inset-58,860},{0,980}}});
         out.push_back({right,{{1080,125},{1080-inset,215},{1080-inset+65,425},{1080-inset-20,605},{1080-inset+58,855},{1080,985}}});
-        out.push_back(triangle(375, ex?420:475, 105, 620, ex?Color{111,51,42,245}:Color{153,82,51,238}));
-        out.push_back(triangle(740, ex?395:450, 118, 620, ex?Color{101,46,40,245}:Color{143,74,49,235}));
+        // Flat-topped mesas sell canyon scale better than triangular "mountains".
+        out.push_back({ex?Color{111,51,42,242}:Color{155,82,51,238},{{275,620},{315,515},{355,476},{430,476},{470,520},{505,620}}});
+        out.push_back({ex?Color{101,46,40,240}:Color{143,74,49,235},{{610,620},{650,500},{695,458},{782,458},{825,510},{860,620}}});
+        // Horizontal strata on the near walls.
+        out.push_back(rect(0,338,inset-38,356,ex?Color{112,50,43,190}:Color{173,96,58,180}));
+        out.push_back(rect(0,492,inset-16,507,ex?Color{103,46,41,175}:Color{158,84,54,170}));
+        out.push_back(rect(1080-inset+38,326,1080,344,ex?Color{103,46,41,185}:Color{162,88,56,180}));
+        out.push_back(rect(1080-inset+18,482,1080,497,ex?Color{96,42,39,170}:Color{150,79,52,170}));
     } else if (k=="desert") {
         out.push_back(rolling(W,650,34,2.0,0.1,{208,159,89,255}));
         out.push_back(rolling(W,708,42,1.65,1.3,{231,184,106,250}));
