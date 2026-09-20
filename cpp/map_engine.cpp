@@ -288,14 +288,15 @@ static void emit_roadside(const std::string& k, uint64_t seed, int frames, doubl
     if (k=="training") { count=11; speed=.064; }
     else if (k=="country") { count=12; speed=.055; }
     else if (k=="mountain" || k=="alpine") { count=12; speed=.070; }
-    else if (k=="night_city" || k=="street" || k=="neon_rain") { count=12; speed=.075; }
-    else if (k=="rain") { count=10; speed=.070; }
+    else if (k=="night_city") { count=16; speed=.078; }
+    else if (k=="street" || k=="neon_rain") { count=14; speed=.078; }
+    else if (k=="rain") { count=12; speed=.070; }
     else if (k=="coast") { count=9; speed=.060; }
-    else if (k=="snow") { count=11; speed=.065; }
+    else if (k=="snow") { count=12; speed=.065; }
     else if (k=="canyon" || k=="extreme_canyon") { count=12; speed=.073; }
     else if (k=="desert") { count=8; speed=.050; }
     else if (k=="forest") { count=14; speed=.075; }
-    else if (k=="tunnel") { count=13; speed=.082; }
+    else if (k=="tunnel") { count=15; speed=.082; }
 
     uint64_t base = seed ^ fnv1a(k);
     for (int frame=0; frame<frames; ++frame) {
@@ -311,17 +312,17 @@ static void emit_roadside(const std::string& k, uint64_t seed, int frames, doubl
                 if (k=="training") kind = (i%5==0 ? "floodlight" : (i%4==0 ? "signboard" : (i%2==0 ? "barrier" : "bollard")));
                 else if (k=="country") kind = (i%6==0 ? "utility_pole" : (i%5==0 ? "haybale" : (i%3==0 ? "hedge" : (i%2==0 ? "fence" : "tree"))));
                 else if (k=="mountain") kind = (i%4==0 ? "pine" : (i%4==1 ? "rock" : (i%4==2 ? "guardrail" : "warning")));
-                else if (k=="night_city") kind = (i%2 ? "lamp" : "barrier");
-                else if (k=="rain") kind = (i%3==0 ? "tree" : "bollard");
+                else if (k=="night_city") kind = (i%4==0 ? "city_sign" : (i%3==0 ? "barrier" : "streetlight"));
+                else if (k=="rain") kind = (i%4==0 ? "tree" : (i%3==0 ? "barrier" : "reflector"));
                 else if (k=="coast") kind = (i%4==0 ? "palm" : "guardrail");
-                else if (k=="snow") kind = (i%3==0 ? "pine_snow" : "snowbank");
+                else if (k=="snow") kind = (i%4==0 ? "pine_snow" : (i%3==0 ? "snowbank" : "snowpole"));
                 else if (k=="canyon") kind = (i%4==0 ? "rock" : (i%4==1 ? "scrub" : "warning"));
                 else if (k=="desert") kind = (i%3==0 ? "cactus" : "rock");
                 else if (k=="forest") kind = (i%2 ? "pine" : "tree_dark");
-                else if (k=="street") kind = (i%3==0 ? "lamp" : "barrier");
-                else if (k=="tunnel") kind = (i%2 ? "tunnel_light" : "barrier");
-                else if (k=="neon_rain") kind = (i%2 ? "neon" : "lamp");
-                else if (k=="alpine") kind = (i%3==0 ? "pine_snow" : "rock");
+                else if (k=="street") kind = (i%4==0 ? "city_sign" : (i%3==0 ? "barrier" : "streetlight"));
+                else if (k=="tunnel") kind = (i%4==0 ? "vent" : (i%2 ? "tunnel_light" : "barrier"));
+                else if (k=="neon_rain") kind = (i%4==0 ? "barrier" : (i%2 ? "neon" : "streetlight"));
+                else if (k=="alpine") kind = (i%4==0 ? "pine_snow" : (i%3==0 ? "snowpole" : "rock"));
                 else if (k=="extreme_canyon") kind = (i%4==0 ? "warning" : (i%4==1 ? "scrub" : "rock"));
                 emit_object(frame, kind, x, y, s, variant);
             }
