@@ -124,8 +124,21 @@ def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
         draw.rectangle([0, 525, W, 650], fill=(244, 218, 160, 24))
     elif track == "mountain":
         draw.rectangle([0, 500, W, 675], fill=(190, 205, 211, 28))
+    elif track == "rain":
+        draw.rectangle([0, 450, W, 690], fill=(145, 160, 166, 34))
+    elif track == "snow":
+        draw.rectangle([0, 470, W, 700], fill=(229, 239, 243, 30))
+    elif track == "street":
+        draw.rectangle([0, 440, W, 650], fill=(151, 157, 164, 18))
+    elif track == "night_city":
+        draw.rectangle([0, 455, W, 665], fill=(72, 83, 113, 18))
+    elif track == "neon_rain":
+        draw.rectangle([0, 430, W, 675], fill=(104, 66, 139, 26))
+    elif track == "alpine":
+        draw.rectangle([0, 445, W, 705], fill=(207, 225, 234, 30))
     elif track in {"canyon", "extreme_canyon"}:
-        draw.rectangle([0, 510, W, 690], fill=(236, 165, 111, 24))
+        alpha = 34 if track == "extreme_canyon" else 24
+        draw.rectangle([0, 510, W, 690], fill=(236, 165, 111, alpha))
     return True
 
 
