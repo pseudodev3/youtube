@@ -1,11 +1,13 @@
 name: GRIDLOOP production dry run
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - map-rebuild
     paths:
       - ".github/workflows/production-dry-run.yml"
+      - ".github/production-dry-run-now"
 
 permissions:
   contents: read
