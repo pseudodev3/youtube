@@ -118,6 +118,14 @@ def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
         draw.rectangle([0, y, W, y + 10], fill=c + (255,))
     for color, pts in scene["terrain"]:
         draw.polygon(pts, fill=color)
+
+    # Lightweight atmospheric perspective: distinct per biome, behind the race.
+    if track == "country":
+        draw.rectangle([0, 525, W, 650], fill=(244, 218, 160, 24))
+    elif track == "mountain":
+        draw.rectangle([0, 500, W, 675], fill=(190, 205, 211, 28))
+    elif track in {"canyon", "extreme_canyon"}:
+        draw.rectangle([0, 510, W, 690], fill=(236, 165, 111, 24))
     return True
 
 
@@ -157,6 +165,7 @@ _OBJECT_HALF_WIDTH = {
     "rock": 32, "cactus": 28, "barrier": 42, "guardrail": 42,
     "bollard": 8, "lamp": 30, "tunnel_light": 30, "warning": 28,
     "snowbank": 42, "palm": 44, "neon": 31,
+    "floodlight": 34, "haybale": 34, "scrub": 30,
 }
 
 
@@ -264,6 +273,24 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
         d.rectangle([x-3*s,y-58*s,x+3*s,y],fill=(60,54,46,240))
         d.polygon([(x,y-82*s),(x-24*s,y-47*s),(x+24*s,y-47*s)],fill=(255,207,57,240))
         d.polygon([(x,y-72*s),(x-12*s,y-52*s),(x+12*s,y-52*s)],fill=(43,39,34,220))
+    elif kind == "floodlight":
+        pole=(64,69,72,242)
+        d.rectangle([x-3*s,y-118*s,x+3*s,y],fill=pole)
+        d.line([(x-24*s,y-112*s),(x+24*s,y-112*s)],fill=pole,width=max(2,int(4*s)))
+        for dx in (-18,-6,6,18):
+            d.rounded_rectangle([x+(dx-5)*s,y-121*s,x+(dx+5)*s,y-111*s],radius=max(1,int(2*s)),fill=(243,238,204,230))
+    elif kind == "haybale":
+        straw=(201,163+v*3,73,240)
+        edge=(139,108,52,220)
+        d.rounded_rectangle([x-28*s,y-34*s,x+28*s,y+3*s],radius=max(3,int(8*s)),fill=straw,outline=edge,width=max(1,int(2*s)))
+        d.line([(x-6*s,y-33*s),(x-6*s,y+2*s)],fill=edge,width=max(1,int(2*s)))
+        d.line([(x+8*s,y-33*s),(x+8*s,y+2*s)],fill=edge,width=max(1,int(2*s)))
+    elif kind == "scrub":
+        dark=(92,92,47,235)
+        light=(125,117,59,215)
+        d.ellipse([x-29*s,y-25*s,x+10*s,y+4*s],fill=dark)
+        d.ellipse([x-7*s,y-33*s,x+28*s,y+3*s],fill=light)
+        d.ellipse([x-15*s,y-40*s,x+12*s,y-6*s],fill=(111,106,52,220))
     elif kind == "snowbank":
         d.ellipse([x-38*s,y-22*s,x+40*s,y+7*s],fill=(239,246,249,222))
     elif kind == "palm":
