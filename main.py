@@ -117,6 +117,7 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     previous_event: str | None = None
     previous_featured_contact = False
     last_frame = None
+    saw_final_result = False
 
     featured_name = str(plan["featured_rival"])
     planned_captions = {
@@ -159,6 +160,7 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
             drift_slips.append(float(rf.player.drift_slip))
             drift_angles.append(float(rf.player.drift_angle))
             longitudinal_loads.append(float(getattr(rf, "player_longitudinal_g", 0.0)))
+            saw_final_result = saw_final_result or bool(getattr(rf, "final_result", False))
 
             if featured and featured.active and 0.0 < featured.z < 1.18:
                 featured_visible_frames += 1
@@ -252,11 +254,10 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         1 for caption in seen_story_captions
         if planned_captions.get(caption, {}).get("actor") == "featured"
     )
-    final_event_texts = [x["text"] for x in event_log if x["time"] >= DURATION - 2.0]
-    has_final_result = any(
-        ("TARGET CLEARED" in text or "MISSED BY" in text)
-        for text in final_event_texts
-    )
+    # Final-result validity comes from the race engine, not from caption wording.
+    # CaptionDirector is free to say "JOB DONE! P4" or any other fresh semantic
+    # equivalent without making QC think the race never produced a result.
+    has_final_result = bool(saw_final_result)
 
     telemetry = {
         "episode": episode,
