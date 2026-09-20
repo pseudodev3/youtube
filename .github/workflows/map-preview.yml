@@ -1,0 +1,90 @@
+name: GRIDLOOP map rebuild previews
+
+on:
+  push:
+    branches:
+      - map-rebuild
+    paths:
+      - "cpp/**"
+      - "native_map_runtime.py"
+      - "renderer.py"
+      - "renderer_enhanced.py"
+      - "renderer_enhanced/**"
+      - "renderer_hybrid.py"
+      - "track_system.py"
+      - "race_engine.py"
+      - "audio.py"
+      - "tools/render_map_previews.py"
+      - ".github/workflows/map-preview.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gridloop-map-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FPS: "24"
+      DURATION: "8"
+      GRIDLOOP_OUTPUT_DIR: "output/map-previews"
+      YOUTUBE_UPLOAD_ENABLED: "false"
+      YOUTUBE_PRIVACY_STATUS: "private"
+
+    steps:
+      - name: Checkout map rebuild branch
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install renderer dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core g++
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build native C++ map engine
+        run: |
+          g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
+          chmod +x cpp/map_engine
+          ./cpp/map_engine training 120001 4 24 > /tmp/training.txt
+          ./cpp/map_engine country 120001 4 24 > /tmp/country.txt
+          ./cpp/map_engine mountain 120001 4 24 > /tmp/mountain.txt
+          ./cpp/map_engine canyon 120001 4 24 > /tmp/canyon.txt
+          grep -q '^S|' /tmp/training.txt
+          grep -q '^P|' /tmp/country.txt
+          grep -q '^P|' /tmp/mountain.txt
+          grep -q '^P|' /tmp/canyon.txt
+
+      - name: Verify preview cannot upload
+        run: |
+          python - <<'PY'
+          import os
+          assert os.environ["YOUTUBE_UPLOAD_ENABLED"] == "false"
+          from youtube_upload import upload_enabled
+          assert upload_enabled() is False
+          print("Upload disabled: preview workflow is safe.")
+          PY
+
+      - name: Render four controlled map previews
+        run: python tools/render_map_previews.py
+
+      - name: Verify career state was untouched
+        run: git diff --exit-code -- career_state.json
+
+      - name: Upload comparison artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gridloop-map-rebuild-previews
+          path: output/map-previews/
+          if-no-files-found: error
+          retention-days: 7
