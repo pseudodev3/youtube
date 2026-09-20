@@ -131,6 +131,7 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
             if i == 0:
                 starting_cars = int(rf.total_cars)
 
+            saw_final_result = saw_final_result or bool(getattr(rf, "final_result", False))
             player_ever_crashed = player_ever_crashed or bool(rf.player.crashed)
             speeds.append(float(rf.player.speed))
             crash_flags.append(bool(rf.player.crashed))
