@@ -60,7 +60,14 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     episode = int(plan["episode"])
     skill = float(career["driver_skill"])
     seed = int(plan["seed"])
-    engine = RaceEngine(skill=skill, seed=seed, duration=DURATION, fps=FPS, plan=plan)
+    engine = RaceEngine(
+        skill=skill,
+        seed=seed,
+        duration=DURATION,
+        fps=FPS,
+        plan=plan,
+        used_caption_hashes=career.get("caption_hashes", []),
+    )
 
     target = OUT / f"episode_{episode:03d}.mp4"
     video_only = OUT / f"episode_{episode:03d}.video.mp4"
@@ -269,6 +276,10 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         "max_event_gap_seconds": round(max(gaps or [DURATION]), 3),
         "has_final_result": has_final_result,
         "music_states_used": sorted(set(music_states)),
+        "captions_used": list(dict.fromkeys(
+            [str(plan.get("hook", "")).strip()]
+            + [str(item.get("text", "")).strip() for item in event_log]
+        )),
     }
     return target, telemetry
 
