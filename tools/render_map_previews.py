@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from PIL import Image, ImageDraw, ImageFont
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -82,6 +84,21 @@ def main() -> None:
             "final_position": telemetry.get("final_position"),
         })
         print(f"MAP PREVIEW complete: {key} -> {destination}")
+
+    # One phone-sized 2x2 sheet makes "do these feel like different worlds?"
+    # immediately reviewable without scrubbing four videos.
+    sheet = Image.new("RGB", (1080, 1920), (18, 20, 21))
+    font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+    font = ImageFont.truetype(str(font_path), 28) if font_path.exists() else ImageFont.load_default()
+    for index, key in enumerate(TRACKS):
+        still = Image.open(OUT / f"{key}.jpg").convert("RGB").resize((540, 960), Image.Resampling.LANCZOS)
+        draw = ImageDraw.Draw(still)
+        draw.rounded_rectangle([18, 18, 230, 64], radius=12, fill=(10, 12, 13, 205))
+        draw.text((32, 27), key.upper(), font=font, fill=(244, 245, 242))
+        x = (index % 2) * 540
+        y = (index // 2) * 960
+        sheet.paste(still, (x, y))
+    sheet.save(OUT / "comparison.jpg", quality=92)
 
     (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
