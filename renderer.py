@@ -154,9 +154,9 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
     theme=getattr(frame,"track_theme","country")
     palettes={
-        "training":((116,174,224),(81,111,122),(78,139,72)),
-        "country":((116,174,224),(81,111,122),(78,139,72)),
-        "mountain":((126,166,205),(72,94,108),(68,111,72)),
+        "training":((103,159,205),(78,86,91),(103,108,106)),
+        "country":((131,187,224),(116,117,83),(176,151,84)),
+        "mountain":((101,139,170),(73,79,83),(70,72,70)),
         "night_city":((24,34,66),(31,37,55),(28,38,49)),
         "rain":((77,101,126),(65,75,87),(60,80,72)),
         "coast":((92,176,222),(72,116,139),(74,146,123)),
@@ -171,6 +171,19 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         "extreme_canyon":((187,109,77),(105,57,49),(121,69,50)),
     }
     sky,mountain_col,ground=palettes.get(theme,palettes["country"])
+    surface_profiles={
+        "training":{"shoulder":(188,192,190,255),"road_a":(47,50,53,255),"road_b":(51,54,57,255),"curb_a":(215,58,51,255),"curb_b":(239,239,232,255)},
+        "country":{"shoulder":(178,158,112,255),"road_a":(57,56,52,255),"road_b":(61,60,56,255),"curb_a":(226,223,203,255),"curb_b":(211,207,185,255)},
+        "mountain":{"shoulder":(105,105,101,255),"road_a":(45,48,50,255),"road_b":(49,52,54,255),"curb_a":(222,224,220,255),"curb_b":(183,187,185,255)},
+        "canyon":{"shoulder":(157,104,72,255),"road_a":(56,51,48,255),"road_b":(61,55,51,255),"curb_a":(231,214,179,255),"curb_b":(194,118,74,255)},
+    }
+    surface=surface_profiles.get(theme,{
+        "shoulder":(204,204,196,255),
+        "road_a":(50,52,55,255),
+        "road_b":(54,56,59,255),
+        "curb_a":(237,62,55,255),
+        "curb_b":(242,242,235,255),
+    })
     img=Image.new("RGB",(W,H),sky); d=ImageDraw.Draw(img,"RGBA")
 
     for y in range(0,HORIZON,8):
@@ -230,10 +243,10 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         roadside = tuple(max(0, min(255, int(c * ground_mul))) for c in ground) + (255,)
         d.polygon([(0,y0),(W,y0),(W,y1),(0,y1)],fill=roadside)
         shoulder=28+p1*30
-        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],fill=(204,204,196,255))
-        road=(50,52,55,255) if j%2 else (54,56,59,255)
+        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],fill=surface["shoulder"])
+        road=surface["road_a"] if j%2 else surface["road_b"]
         d.polygon([(c0-half0,y0),(c0+half0,y0),(c1+half1,y1),(c1-half1,y1)],fill=road)
-        curb=(237,62,55,255) if (j//3)%2 else (242,242,235,255)
+        curb=surface["curb_a"] if (j//3)%2 else surface["curb_b"]
         cw0,cw1=max(2,half0*.045),max(2,half1*.045)
         d.polygon([(c0-half0,y0),(c0-half0+cw0,y0),(c1-half1+cw1,y1),(c1-half1,y1)],fill=curb)
         d.polygon([(c0+half0-cw0,y0),(c0+half0,y0),(c1+half1,y1),(c1+half1-cw1,y1)],fill=curb)
