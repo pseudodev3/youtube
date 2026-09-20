@@ -71,6 +71,7 @@ class RaceFrame:
     track_theme: str
     hook_text: str
     player_longitudinal_g: float = 0.0
+    final_result: bool = False
 
 
 class RaceEngine:
@@ -1017,8 +1018,9 @@ class RaceEngine:
         road_width = max(0.62, min(0.92, road_width))
         position = self._position()
         progress = min(1.0, t / max(0.1, self.duration))
+        final_result = t >= self.duration - 1.30
 
-        if t >= self.duration - 1.30:
+        if final_result:
             if position <= self.target_position:
                 event = f"TARGET CLEARED! P{position} 🔥"
             else:
@@ -1049,4 +1051,5 @@ class RaceEngine:
                 -1.0,
                 min(1.0, (float(self.player.speed) - player_speed_before) * self.fps * 1.8),
             ),
+            final_result=final_result,
         )
