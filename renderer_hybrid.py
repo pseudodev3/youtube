@@ -24,6 +24,7 @@ _ORIG_DESERT = enhanced._base._desert
 _ORIG_FOREST = enhanced._base._forest
 _ORIG_STREET = enhanced._base._street
 _ORIG_TUNNEL = enhanced._base._tunnel
+_ORIG_SNOW = enhanced._base._snow
 
 
 def _episode() -> int:
@@ -103,6 +104,21 @@ def _tunnel(draw) -> None:
     _ORIG_TUNNEL(draw)
 
 
+def _snow(draw, frame) -> None:
+    key = enhanced._road_key(frame)
+    if _scene_ok(key) and key in {"snow", "alpine"}:
+        # Preserve weather only. Native C++ owns all roadside geometry, so the
+        # legacy fixed snowbanks/pines cannot drift into a curved road.
+        rng = enhanced._base.random.Random(8200 + int(frame.t * 12))
+        for _ in range(42):
+            x = rng.randrange(0, W)
+            y = rng.randrange(220, 1540)
+            r = rng.randrange(2, 6)
+            draw.ellipse([x-r, y-r, x+r, y+r], fill=(250, 252, 255, 155))
+        return
+    _ORIG_SNOW(draw, frame)
+
+
 def _decorate(img, frame, frame_no: int):
     # Run the existing renderer first. Its map-specific geometry helpers above
     # become no-ops only when native data is actually available, while tints,
@@ -110,7 +126,7 @@ def _decorate(img, frame, frame_no: int):
     out = _ORIG_DECORATE(img, frame, frame_no)
     if _NATIVE_ACTIVE:
         key = enhanced._road_key(frame)
-        native.draw_roadside(out, key, _episode(), frame_no)
+        native.draw_roadside(out, key, _episode(), frame_no, frame=frame)
     return out
 
 
@@ -126,6 +142,7 @@ if _NATIVE_ACTIVE:
     enhanced._base._forest = _forest
     enhanced._base._street = _street
     enhanced._base._tunnel = _tunnel
+    enhanced._base._snow = _snow
     enhanced._base._decorate = _decorate
     print("GRIDLOOP map engine: native C++ terrain + roadside scenery active")
 else:

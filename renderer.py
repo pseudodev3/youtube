@@ -10,6 +10,24 @@ HORIZON = 560
 ROAD_BOTTOM = 980
 
 
+def _video_caption_text(text: str) -> str:
+    # DejaVu is deliberately bundled everywhere we render, but it does not
+    # contain color emoji glyphs. Keep metadata expressive while ensuring video
+    # captions never show tofu/missing-glyph squares.
+    return (
+        str(text)
+        .replace("🔥", "")
+        .replace("😭", "")
+        .replace("💀", "")
+        .replace("😤", "")
+        .replace("😳", "")
+        .replace("😈", "")
+        .replace("🤯", "")
+        .replace("🚨", "")
+        .strip()
+    )
+
+
 def _font(size: int, bold: bool = False):
     candidates = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -39,11 +57,28 @@ RIVAL_PALETTES = [
 ]
 
 
-def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading: float,
-         player: bool = False, color_id: int = 0):
+def _car(
+    draw: ImageDraw.ImageDraw,
+    cx: float,
+    cy: float,
+    scale: float,
+    heading: float,
+    player: bool = False,
+    color_id: int = 0,
+    longitudinal_load: float = 0.0,
+    braking: float = 0.0,
+):
     sw = 132 * scale
     sh = 218 * scale
     dx = max(-0.08, min(0.08, heading)) * 18 * scale
+    load = max(-1.0, min(1.0, longitudinal_load))
+    brake = max(0.0, min(1.0, braking))
+
+    # Wheels remain planted. The sprung body pitches a few pixels around them:
+    # braking (negative load) nudges the nose down/rear up; acceleration reverses it.
+    def by(y: float) -> float:
+        return y - load * ((cy - y) / max(1.0, sh)) * 11.0 * scale
+
     if player:
         body=(236,54,50,255); body_light=(255,96,78,255); body_dark=(124,25,29,255)
         accent=(255,211,86,255); cockpit=(18,24,32,255)
@@ -51,42 +86,89 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
         body,body_light,body_dark,accent=RIVAL_PALETTES[color_id % len(RIVAL_PALETTES)]
         cockpit=(13,25,46,255)
     wheel=(18,20,24,255); carbon=(28,29,33,255)
+
     draw.ellipse([cx-sw*.50,cy-sh*.10,cx+sw*.50,cy+sh*.49],fill=(0,0,0,58))
     fw,fh=sw*.15,sh*.16; rw,rh=sw*.18,sh*.19
     for side in (-1,1):
         sx=cx+side*sw*.43
         draw.rounded_rectangle([sx-fw/2,cy-sh*.24,sx+fw/2,cy-sh*.24+fh],radius=max(2,int(7*scale)),fill=wheel)
         draw.rounded_rectangle([sx-rw/2,cy+sh*.14,sx+rw/2,cy+sh*.14+rh],radius=max(2,int(8*scale)),fill=wheel)
-    wing_y=cy-sh*.42
-    draw.rounded_rectangle([cx-sw*.43+dx*.18,wing_y,cx+sw*.43+dx*.18,wing_y+sh*.055],radius=max(2,int(7*scale)),fill=carbon)
-    draw.rectangle([cx-sw*.47+dx*.18,wing_y+sh*.01,cx-sw*.39+dx*.18,wing_y+sh*.075],fill=body_dark)
-    draw.rectangle([cx+sw*.39+dx*.18,wing_y+sh*.01,cx+sw*.47+dx*.18,wing_y+sh*.075],fill=body_dark)
+
+    wing_y=by(cy-sh*.42)
+    wing_y2=by(cy-sh*.42+sh*.055)
+    draw.rounded_rectangle([cx-sw*.43+dx*.18,wing_y,cx+sw*.43+dx*.18,wing_y2],radius=max(2,int(7*scale)),fill=carbon)
+    draw.rectangle([cx-sw*.47+dx*.18,by(cy-sh*.41),cx-sw*.39+dx*.18,by(cy-sh*.345)],fill=body_dark)
+    draw.rectangle([cx+sw*.39+dx*.18,by(cy-sh*.41),cx+sw*.47+dx*.18,by(cy-sh*.345)],fill=body_dark)
+
     shell=[
-        (cx+dx,cy-sh*.48),(cx+sw*.095+dx*.70,cy-sh*.32),(cx+sw*.17+dx*.42,cy-sh*.13),
-        (cx+sw*.31+dx*.20,cy+sh*.02),(cx+sw*.27,cy+sh*.28),(cx+sw*.18,cy+sh*.43),
-        (cx-sw*.18,cy+sh*.43),(cx-sw*.27,cy+sh*.28),(cx-sw*.31+dx*.20,cy+sh*.02),
-        (cx-sw*.17+dx*.42,cy-sh*.13),(cx-sw*.095+dx*.70,cy-sh*.32),
+        (cx+dx,by(cy-sh*.48)),(cx+sw*.095+dx*.70,by(cy-sh*.32)),(cx+sw*.17+dx*.42,by(cy-sh*.13)),
+        (cx+sw*.31+dx*.20,by(cy+sh*.02)),(cx+sw*.27,by(cy+sh*.28)),(cx+sw*.18,by(cy+sh*.43)),
+        (cx-sw*.18,by(cy+sh*.43)),(cx-sw*.27,by(cy+sh*.28)),(cx-sw*.31+dx*.20,by(cy+sh*.02)),
+        (cx-sw*.17+dx*.42,by(cy-sh*.13)),(cx-sw*.095+dx*.70,by(cy-sh*.32)),
     ]
     draw.polygon(shell,fill=body)
-    draw.polygon([(cx-sw*.27,cy-sh*.04),(cx-sw*.16,cy-sh*.12),(cx-sw*.10,cy+sh*.26),(cx-sw*.21,cy+sh*.34)],fill=body_light)
-    draw.polygon([(cx+sw*.27,cy-sh*.04),(cx+sw*.16,cy-sh*.12),(cx+sw*.10,cy+sh*.26),(cx+sw*.21,cy+sh*.34)],fill=body_dark)
-    draw.polygon([(cx+dx*.90,cy-sh*.44),(cx+sw*.037,cy-sh*.19),(cx+sw*.045,cy+sh*.20),(cx-sw*.045,cy+sh*.20),(cx-sw*.037,cy-sh*.19)],fill=accent)
-    draw.ellipse([cx-sw*.13,cy-sh*.08,cx+sw*.13,cy+sh*.19],fill=cockpit)
-    draw.ellipse([cx-sw*.08,cy-sh*.035,cx+sw*.02,cy+sh*.085],fill=(80,96,111,210))
-    draw.arc([cx-sw*.12,cy-sh*.055,cx+sw*.12,cy+sh*.075],start=190,end=350,fill=(42,44,48,255),width=max(2,int(7*scale)))
-    draw.polygon([(cx-sw*.16,cy+sh*.18),(cx+sw*.16,cy+sh*.18),(cx+sw*.20,cy+sh*.37),(cx-sw*.20,cy+sh*.37)],fill=body_dark)
-    draw.rounded_rectangle([cx-sw*.40,cy+sh*.37,cx+sw*.40,cy+sh*.44],radius=max(2,int(7*scale)),fill=carbon)
-    draw.rounded_rectangle([cx-sw*.28,cy+sh*.335,cx+sw*.28,cy+sh*.375],radius=max(2,int(5*scale)),fill=accent)
+    draw.polygon([(cx-sw*.27,by(cy-sh*.04)),(cx-sw*.16,by(cy-sh*.12)),(cx-sw*.10,by(cy+sh*.26)),(cx-sw*.21,by(cy+sh*.34))],fill=body_light)
+    draw.polygon([(cx+sw*.27,by(cy-sh*.04)),(cx+sw*.16,by(cy-sh*.12)),(cx+sw*.10,by(cy+sh*.26)),(cx+sw*.21,by(cy+sh*.34))],fill=body_dark)
+    draw.polygon([(cx+dx*.90,by(cy-sh*.44)),(cx+sw*.037,by(cy-sh*.19)),(cx+sw*.045,by(cy+sh*.20)),(cx-sw*.045,by(cy+sh*.20)),(cx-sw*.037,by(cy-sh*.19))],fill=accent)
+
+    draw.ellipse([cx-sw*.13,by(cy-sh*.08),cx+sw*.13,by(cy+sh*.19)],fill=cockpit)
+    draw.ellipse([cx-sw*.08,by(cy-sh*.035),cx+sw*.02,by(cy+sh*.085)],fill=(80,96,111,210))
+    draw.arc([cx-sw*.12,by(cy-sh*.055),cx+sw*.12,by(cy+sh*.075)],start=190,end=350,fill=(42,44,48,255),width=max(2,int(7*scale)))
+    draw.polygon([(cx-sw*.16,by(cy+sh*.18)),(cx+sw*.16,by(cy+sh*.18)),(cx+sw*.20,by(cy+sh*.37)),(cx-sw*.20,by(cy+sh*.37))],fill=body_dark)
+    draw.rounded_rectangle([cx-sw*.40,by(cy+sh*.37),cx+sw*.40,by(cy+sh*.44)],radius=max(2,int(7*scale)),fill=carbon)
+    draw.rounded_rectangle([cx-sw*.28,by(cy+sh*.335),cx+sw*.28,by(cy+sh*.375)],radius=max(2,int(5*scale)),fill=accent)
+
+    # Rear lamps are deliberately *red*, not amber. When braking, intensity and
+    # halo increase while hue stays pinned to racing red.
     if player:
-        lamp_y=cy+sh*.285
-        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y+sh*.052],radius=max(2,int(4*scale)),fill=(255,219,92,255))
-        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y+sh*.052],radius=max(2,int(4*scale)),fill=(255,219,92,255))
+        lamp_y=by(cy+sh*.285)
+        lamp_y2=by(cy+sh*.337)
+        side_off=(76,4,4,185)
+        side_on=(255,0,0,255)
+        side_fill=side_on if brake >= .08 else side_off
+        if brake >= .08:
+            side_glow=int(58+72*brake)
+            for side in (-1,1):
+                lx=cx+side*sw*.088
+                draw.ellipse(
+                    [lx-18*scale,lamp_y-9*scale,lx+18*scale,lamp_y2+9*scale],
+                    fill=(255,0,0,side_glow),
+                )
+        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y2],radius=max(2,int(4*scale)),fill=side_fill)
+        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y2],radius=max(2,int(4*scale)),fill=side_fill)
+
+    # F1-style central rear rain/brake light. Hue remains pure red at every level.
+    rear_y=by(cy+sh*.315)
+    active=brake >= .08
+    base_fill=(255,0,0,255) if active else (82,3,3,175)
+    glow_r=(8 + 16*brake)*scale
+    glow_alpha=int(18 + 108*brake) if active else 10
+    draw.ellipse(
+        [cx-glow_r,rear_y-glow_r*.65,cx+glow_r,rear_y+glow_r*.65],
+        fill=(255,0,0,glow_alpha),
+    )
+    lamp_r=max(2.0,(4.0+1.8*brake)*scale)
+    draw.ellipse([cx-lamp_r,rear_y-lamp_r,cx+lamp_r,rear_y+lamp_r],fill=base_fill)
 
 
-def _rotated_car(img: Image.Image,cx: float,cy: float,scale: float,angle_deg: float,player: bool=False,color_id: int=0):
+def _rotated_car(
+    img: Image.Image,
+    cx: float,
+    cy: float,
+    scale: float,
+    angle_deg: float,
+    player: bool=False,
+    color_id: int=0,
+    longitudinal_load: float=0.0,
+    braking: float=0.0,
+):
     box=int(max(300,360*scale))
     layer=Image.new("RGBA",(box,box),(0,0,0,0)); ld=ImageDraw.Draw(layer,"RGBA")
-    _car(ld,box/2,box/2,scale,0.0,player,color_id)
+    _car(
+        ld,box/2,box/2,scale,0.0,player,color_id,
+        longitudinal_load=longitudinal_load,
+        braking=braking,
+    )
     rotated=layer.rotate(-angle_deg,resample=Image.Resampling.BICUBIC,expand=True)
     img.paste(rotated,(int(cx-rotated.width/2),int(cy-rotated.height/2)),rotated)
 
@@ -154,9 +236,9 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     rng=random.Random(frame_no//3)
     theme=getattr(frame,"track_theme","country")
     palettes={
-        "training":((116,174,224),(81,111,122),(78,139,72)),
-        "country":((116,174,224),(81,111,122),(78,139,72)),
-        "mountain":((126,166,205),(72,94,108),(68,111,72)),
+        "training":((103,159,205),(78,86,91),(103,108,106)),
+        "country":((131,187,224),(116,117,83),(176,151,84)),
+        "mountain":((101,139,170),(73,79,83),(70,72,70)),
         "night_city":((24,34,66),(31,37,55),(28,38,49)),
         "rain":((77,101,126),(65,75,87),(60,80,72)),
         "coast":((92,176,222),(72,116,139),(74,146,123)),
@@ -171,6 +253,91 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         "extreme_canyon":((187,109,77),(105,57,49),(121,69,50)),
     }
     sky,mountain_col,ground=palettes.get(theme,palettes["country"])
+    surface_profiles={
+        "training":{
+            "shoulder":(188,192,190,255),"road_a":(47,50,53,255),"road_b":(51,54,57,255),
+            "curb_a":(215,58,51,255),"curb_b":(239,239,232,255),
+            "roadside":((101,106,105,255),(111,115,113,255)),
+        },
+        "country":{
+            "shoulder":(178,158,112,255),"road_a":(57,56,52,255),"road_b":(61,60,56,255),
+            "curb_a":(226,223,203,255),"curb_b":(211,207,185,255),
+            "roadside":((181,151,77,255),(148,139,72,255),(204,171,85,255),(126,139,67,255)),
+        },
+        "mountain":{
+            "shoulder":(105,105,101,255),"road_a":(45,48,50,255),"road_b":(49,52,54,255),
+            "curb_a":(222,224,220,255),"curb_b":(183,187,185,255),
+            "roadside":((69,72,70,255),(79,81,78,255),(59,63,64,255)),
+        },
+        "canyon":{
+            "shoulder":(157,104,72,255),"road_a":(56,51,48,255),"road_b":(61,55,51,255),
+            "curb_a":(231,214,179,255),"curb_b":(194,118,74,255),
+            "roadside":((145,82,54,255),(158,91,59,255),(129,71,49,255)),
+        },
+        "night_city":{
+            "shoulder":(89,92,98,255),"road_a":(37,40,45,255),"road_b":(41,44,49,255),
+            "curb_a":(229,196,67,255),"curb_b":(126,132,139,255),
+            "roadside":((29,33,40,255),(38,42,49,255),(23,27,34,255)),
+        },
+        "coast":{
+            "shoulder":(183,178,155,255),"road_a":(53,56,57,255),"road_b":(58,61,62,255),
+            "curb_a":(235,234,218,255),"curb_b":(84,153,183,255),
+            "roadside":((47,139,166,255),(92,108,96,255),(58,150,177,255)),
+        },
+        "forest":{
+            "shoulder":(91,96,78,255),"road_a":(45,49,47,255),"road_b":(49,53,51,255),
+            "curb_a":(210,214,192,255),"curb_b":(88,122,75,255),
+            "roadside":((39,76,49,255),(48,88,55,255),(31,64,43,255)),
+        },
+        "desert":{
+            "shoulder":(191,151,94,255),"road_a":(58,54,49,255),"road_b":(63,58,52,255),
+            "curb_a":(233,214,174,255),"curb_b":(184,126,73,255),
+            "roadside":((198,150,83,255),(218,171,96,255),(184,133,76,255)),
+        },
+        "rain":{
+            "shoulder":(92,102,102,255),"road_a":(39,45,49,255),"road_b":(43,49,53,255),
+            "curb_a":(214,220,218,255),"curb_b":(82,111,117,255),
+            "roadside":((53,70,64,255),(61,80,72,255),(44,61,57,255)),
+        },
+        "snow":{
+            "shoulder":(217,223,224,255),"road_a":(58,63,67,255),"road_b":(63,68,72,255),
+            "curb_a":(242,245,244,255),"curb_b":(162,184,196,255),
+            "roadside":((225,232,234,255),(204,215,220,255),(236,241,242,255)),
+        },
+        "street":{
+            "shoulder":(111,113,116,255),"road_a":(46,48,51,255),"road_b":(50,52,55,255),
+            "curb_a":(238,197,55,255),"curb_b":(194,198,198,255),
+            "roadside":((68,71,76,255),(82,84,88,255),(59,62,67,255)),
+        },
+        "tunnel":{
+            "shoulder":(69,71,75,255),"road_a":(34,37,40,255),"road_b":(38,41,44,255),
+            "curb_a":(220,191,92,255),"curb_b":(112,116,121,255),
+            "roadside":((35,37,42,255),(43,45,50,255),(27,30,34,255)),
+        },
+        "neon_rain":{
+            "shoulder":(58,55,72,255),"road_a":(32,34,43,255),"road_b":(36,38,47,255),
+            "curb_a":(47,220,255,255),"curb_b":(246,67,203,255),
+            "roadside":((29,31,43,255),(42,34,55,255),(25,35,49,255)),
+        },
+        "alpine":{
+            "shoulder":(191,201,201,255),"road_a":(52,57,60,255),"road_b":(57,62,65,255),
+            "curb_a":(239,243,241,255),"curb_b":(133,159,171,255),
+            "roadside":((190,204,202,255),(169,188,190,255),(217,226,225,255)),
+        },
+        "extreme_canyon":{
+            "shoulder":(128,72,57,255),"road_a":(48,43,42,255),"road_b":(53,48,46,255),
+            "curb_a":(246,202,125,255),"curb_b":(154,72,59,255),
+            "roadside":((112,59,47,255),(126,65,50,255),(92,47,42,255)),
+        },
+    }
+    surface=surface_profiles.get(theme,{
+        "shoulder":(204,204,196,255),
+        "road_a":(50,52,55,255),
+        "road_b":(54,56,59,255),
+        "curb_a":(237,62,55,255),
+        "curb_b":(242,242,235,255),
+        "roadside":(ground+(255,),),
+    })
     img=Image.new("RGB",(W,H),sky); d=ImageDraw.Draw(img,"RGBA")
 
     for y in range(0,HORIZON,8):
@@ -226,14 +393,18 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         y0=horizon_y+(p0**1.72)*(H-horizon_y); y1=horizon_y+(p1**1.72)*(H-horizon_y)
         half0=(65+(p0**1.28)*ROAD_BOTTOM)*width_mul; half1=(65+(p1**1.28)*ROAD_BOTTOM)*width_mul
         c0=_road_center(p0,frame,cam_x); c1=_road_center(p1,frame,cam_x)
-        ground_mul = 0.94 if j % 2 else 1.03
-        roadside = tuple(max(0, min(255, int(c * ground_mul))) for c in ground) + (255,)
-        d.polygon([(0,y0),(W,y0),(W,y1),(0,y1)],fill=roadside)
         shoulder=28+p1*30
-        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],fill=(204,204,196,255))
-        road=(50,52,55,255) if j%2 else (54,56,59,255)
+        roadside_palette=surface["roadside"]
+        left_roadside=roadside_palette[(j//18)%len(roadside_palette)]
+        right_roadside=roadside_palette[((j//16)+1)%len(roadside_palette)]
+        left0=c0-half0-shoulder; left1=c1-half1-shoulder
+        right0=c0+half0+shoulder; right1=c1+half1+shoulder
+        d.polygon([(0,y0),(left0,y0),(left1,y1),(0,y1)],fill=left_roadside)
+        d.polygon([(right0,y0),(W,y0),(W,y1),(right1,y1)],fill=right_roadside)
+        d.polygon([(c0-half0-shoulder,y0),(c0+half0+shoulder,y0),(c1+half1+shoulder,y1),(c1-half1-shoulder,y1)],fill=surface["shoulder"])
+        road=surface["road_a"] if j%2 else surface["road_b"]
         d.polygon([(c0-half0,y0),(c0+half0,y0),(c1+half1,y1),(c1-half1,y1)],fill=road)
-        curb=(237,62,55,255) if (j//3)%2 else (242,242,235,255)
+        curb=surface["curb_a"] if (j//3)%2 else surface["curb_b"]
         cw0,cw1=max(2,half0*.045),max(2,half1*.045)
         d.polygon([(c0-half0,y0),(c0-half0+cw0,y0),(c1-half1+cw1,y1),(c1-half1,y1)],fill=curb)
         d.polygon([(c0+half0-cw0,y0),(c0+half0,y0),(c1+half1,y1),(c1+half1-cw1,y1)],fill=curb)
@@ -274,8 +445,12 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             amp=1.5 if rival.contact_strength<.48 else 4.0 if rival.contact_strength<.82 else 10.0
             contact_angle=rival.contact_side*rival.contact_strength*amp*math.sin(frame.t*44.0)
 
+        braking_states={"panic","brake_check","avoid_crash","late_react","aftermath","recover"}
+        rival_brake=1.0 if rival.behavior in {"panic","brake_check","avoid_crash"} else .62 if rival.behavior in braking_states else 0.0
+        rival_load=-.72 if rival.behavior in {"panic","brake_check","avoid_crash"} else -.36 if rival.behavior in braking_states else .28 if rival.behavior=="divebomb" else 0.0
+
         if rival.behavior in {"spin","big_spin","aftermath","recover"} or abs(rival.rotation)>.10:
-            _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color)
+            _rotated_car(img,x,y,scale,rival.rotation*70.0+contact_angle,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
             d=ImageDraw.Draw(img,"RGBA")
             smoke_count=18 if rival.behavior=="big_spin" else 13 if rival.behavior=="aftermath" else 8
             for _ in range(smoke_count):
@@ -290,19 +465,16 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
                 d.line([(x-38*scale,y+55*scale),(x-rival.slide_velocity*9000,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
                 d.line([(x+38*scale,y+55*scale),(x-rival.slide_velocity*9000+76*scale,y+145*scale)],fill=(15,15,17,120),width=max(4,int(8*scale)))
         elif rival.contact_timer>0:
-            _rotated_car(img,x,y,scale,contact_angle,False,rival.color)
+            _rotated_car(img,x,y,scale,contact_angle,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
             d=ImageDraw.Draw(img,"RGBA")
         else:
-            _car(d,x,y,scale,rival.heading,False,rival.color)
+            _car(d,x,y,scale,rival.heading,False,rival.color,longitudinal_load=rival_load,braking=rival_brake)
 
         if rival.contact_timer>0:
             _draw_contact_sparks(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_tire_scrub(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
             _draw_impact_debris(d,rng,x,y,scale,rival.contact_side,rival.contact_strength)
 
-        if rival.behavior in {"panic","brake_check","avoid_crash"}:
-            s=scale
-            d.ellipse([x-40*s,y+62*s,x-20*s,y+80*s],fill=(255,65,45,240)); d.ellipse([x+20*s,y+62*s,x+40*s,y+80*s],fill=(255,65,45,240))
         if (rival.behavior!="normal" or rival.name==frame.featured_rival) and p>.28:
             text=rival.name; bb=d.textbbox((0,0),text,font=tiny); tw=bb[2]-bb[0]; ty=y-125*scale
             outline=(255,220,95,220) if rival.name==frame.featured_rival else (255,255,255,35)
@@ -314,16 +486,22 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     px=pcenter+frame.player.lane*phalf*.68
 
     drift_angle_deg=frame.player.drift_angle*54.0
+    drift_visual=max(0.0,min(1.0,max(abs(frame.player.drift_slip)/.0088,abs(frame.player.drift_angle)/.52)))
     if frame.player.drifting:
         slip_dir=1 if frame.player.drift_slip>0 else -1
+        particle_count=6+int(12*drift_visual)
         for local_x,local_y in [(-56,72),(56,72)]:
             rx,ry=_rotate_point(local_x,local_y,drift_angle_deg); tx,ty=px+rx,py+ry
-            for n in range(10):
-                trail=18+n*17+rng.uniform(-5,5); sx=tx-slip_dir*trail*.55+rng.uniform(-10,10); sy=ty+trail+rng.uniform(-7,7)
-                r=10+n*.9+rng.uniform(0,7)
-                d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,max(18,78-n*5)))
-            d.line([(tx,ty),(tx-slip_dir*115,ty+235)],fill=(15,15,17,125),width=10)
-        d.line([(px,py+90),(px-slip_dir*150,py+280)],fill=(255,255,255,28),width=4)
+            for n in range(particle_count):
+                trail=18+n*(14+5*drift_visual)+rng.uniform(-5,5)
+                sx=tx-slip_dir*trail*(.46+.18*drift_visual)+rng.uniform(-10,10)
+                sy=ty+trail+rng.uniform(-7,7)
+                r=8+n*.75+rng.uniform(0,5+4*drift_visual)
+                alpha=max(14,int(46+50*drift_visual-n*3.8))
+                d.ellipse([sx-r,sy-r,sx+r,sy+r],fill=(222,225,229,alpha))
+            skid_alpha=int(80+65*drift_visual)
+            d.line([(tx,ty),(tx-slip_dir*(90+55*drift_visual),ty+205+45*drift_visual)],fill=(15,15,17,skid_alpha),width=max(7,int(8+4*drift_visual)))
+        d.line([(px,py+90),(px-slip_dir*(115+55*drift_visual),py+245+45*drift_visual)],fill=(255,255,255,int(18+20*drift_visual)),width=4)
     elif abs(frame.player.heading)>.15 or frame.player.crashed:
         for side in (-1,1):
             sx=px+side*54
@@ -340,8 +518,13 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         amp=1.6 if frame.player.contact_strength<.48 else 4.2 if frame.player.contact_strength<.84 else 10.5
         player_contact_angle=frame.player.contact_side*frame.player.contact_strength*amp*math.sin(frame.t*42.0)
 
+    player_load=max(-1.0,min(1.0,float(getattr(frame,"player_longitudinal_g",0.0))))
+    player_brake=max(0.0,min(1.0,-player_load*1.25))
+    if frame.player.crashed:
+        player_brake=max(player_brake,.82)
+
     if frame.player.crashed and abs(frame.player.crash_rotation)>.03:
-        _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,frame.player.crash_rotation*70.0+player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
         for _ in range(18):
             rr=rng.uniform(10,28); sx=px+rng.uniform(-72,72); sy=py+rng.uniform(42,165)
             d.ellipse([sx-rr,sy-rr,sx+rr,sy+rr],fill=(220,224,228,rng.randint(38,96)))
@@ -349,11 +532,11 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
             ox=rng.uniform(-72,72); oy=rng.uniform(45,145); rr=rng.uniform(2,5)
             d.rectangle([px+ox-rr,py+oy-rr,px+ox+rr,py+oy+rr],fill=rng.choice([(45,45,48,155),(105,108,112,140),(246,172,65,150)]))
     elif frame.player.drifting and abs(frame.player.drift_angle)>.08:
-        _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,drift_angle_deg+player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
     elif frame.player.contact_timer>0:
-        _rotated_car(img,px,py,1.15,player_contact_angle,True,0); d=ImageDraw.Draw(img,"RGBA")
+        _rotated_car(img,px,py,1.15,player_contact_angle,True,0,longitudinal_load=player_load,braking=player_brake); d=ImageDraw.Draw(img,"RGBA")
     else:
-        _car(d,px,py,1.15,frame.player.heading,True,0)
+        _car(d,px,py,1.15,frame.player.heading,True,0,longitudinal_load=player_load,braking=player_brake)
 
     if frame.player.contact_timer>0:
         _draw_contact_sparks(d,rng,px,py,1.15,frame.player.contact_side,frame.player.contact_strength)
@@ -394,30 +577,77 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*frame.race_progress,by1],radius=4,fill=(255,213,90,215))
 
     if frame.event_text:
-        text=frame.event_text; box=d.textbbox((0,0),text,font=f1); tw=box[2]-box[0]
-        event_font=f1
+        # Race beats should read like broadcast captions, not modal UI.
+        text=_video_caption_text(frame.event_text)
+        event_font=_font(48,True)
+        box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
+        if tw>880:
+            event_font=_font(39,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
         if tw>900:
-            event_font=_font(40,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
-        d.rounded_rectangle([W/2-tw/2-30,320,W/2+tw/2+30,414],radius=24,fill=(0,0,0,185),outline=(255,255,255,40),width=2)
-        d.text((W/2-tw/2,340),text,font=event_font,fill=(255,255,255,255))
+            event_font=_font(34,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
 
-    if frame.t<2.25:
-        title=_font(58,True); sub=_font(32,True)
-        alpha=230 if frame.t<1.8 else int(max(0,230*(2.25-frame.t)/.45))
-        d.rounded_rectangle([95,1260,W-95,1510],radius=36,fill=(5,8,12,alpha),outline=(255,215,90,min(220,alpha)),width=3)
+        accent=(255,215,90,235)
+        upper=text.upper()
+        if any(word in upper for word in ("CRASH","PILEUP","HIT","SPIN","CONTACT")):
+            accent=(255,105,84,240)
+        elif "CLEARED" in upper:
+            accent=(118,231,155,240)
+
+        event_x=W/2-tw/2
+        event_y=338
+        d.text(
+            (event_x,event_y),
+            text,
+            font=event_font,
+            fill=(255,255,255,252),
+            stroke_width=4,
+            stroke_fill=(0,0,0,205),
+        )
+        line_w=max(72,min(170,int(tw*.24)))
+        d.rounded_rectangle(
+            [W/2-line_w/2,event_y+63,W/2+line_w/2,event_y+68],
+            radius=3,
+            fill=accent,
+        )
+
+    if frame.t<1.82:
+        # Cinematic intro subtitle: quick fade-in, readable hold, clean fade-out.
+        title=_font(54,True); sub=_font(27,True)
+        if frame.t<.16:
+            alpha=int(245*max(0.0,frame.t/.16))
+        elif frame.t<1.30:
+            alpha=245
+        else:
+            alpha=int(max(0,245*(1.82-frame.t)/.52))
+
         hook=getattr(frame,"hook_text",f"CAN RED REACH P{frame.target_position}?")
         hook_font=title
         bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 820:
-            hook_font=_font(46,True); bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 820:
-            hook_font=_font(38,True); bb=d.textbbox((0,0),hook,font=hook_font)
-        d.text((W/2-(bb[2]-bb[0])/2,1300),hook,font=hook_font,fill=(255,255,255,alpha))
+        if bb[2]-bb[0] > 880:
+            hook_font=_font(45,True); bb=d.textbbox((0,0),hook,font=hook_font)
+        if bb[2]-bb[0] > 880:
+            hook_font=_font(37,True); bb=d.textbbox((0,0),hook,font=hook_font)
+
+        hook_x=W/2-(bb[2]-bb[0])/2
+        d.text(
+            (hook_x,1328),
+            hook,
+            font=hook_font,
+            fill=(255,255,255,alpha),
+            stroke_width=4,
+            stroke_fill=(0,0,0,min(190,alpha)),
+        )
+
         rival=f"{getattr(frame,'track_name','CIRCUIT')} • WATCH {frame.featured_rival}"
-        bb=d.textbbox((0,0),rival,font=sub); d.text((W/2-(bb[2]-bb[0])/2,1390),rival,font=sub,fill=(255,220,95,alpha))
-        hint="something always happens around him..."
-        hintf=_font(27,False); bb=d.textbbox((0,0),hint,font=hintf)
-        d.text((W/2-(bb[2]-bb[0])/2,1440),hint,font=hintf,fill=(230,234,240,alpha))
+        bb=d.textbbox((0,0),rival,font=sub)
+        d.text(
+            (W/2-(bb[2]-bb[0])/2,1404),
+            rival,
+            font=sub,
+            fill=(255,220,95,alpha),
+            stroke_width=2,
+            stroke_fill=(0,0,0,min(175,alpha)),
+        )
 
     if frame.race_progress>.945:
         success=frame.position<=frame.target_position

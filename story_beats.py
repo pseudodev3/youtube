@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from captioning import CaptionDirector, action_candidates, hook_candidates
+
 
 STORY_TEMPLATES = {
     "rival_blockade": {
@@ -135,19 +137,35 @@ def choose_story_type(rng, career: dict, featured_rival: str) -> str:
     return rng.choice(choices or weighted)
 
 
-def build_story(story_type: str, rival: str, rng, duration: float = 24.0) -> dict:
+def build_story(
+    story_type: str,
+    rival: str,
+    rng,
+    duration: float = 24.0,
+    episode: int = 1,
+    seed: int = 0,
+    used_caption_hashes=None,
+) -> dict:
     template = deepcopy(STORY_TEMPLATES[story_type])
-    hook = rng.choice(template["hooks"]).format(rival=rival)
+    director = CaptionDirector(seed=seed ^ 0x51A7, episode=episode, used_hashes=used_caption_hashes)
+    hook = director.fresh(
+        hook_candidates(story_type, rival, template["hooks"]),
+        category=f"hook:{story_type}",
+    )
     beats = []
     for t, actor, action, caption in template["beats"]:
         if t >= duration - 1.8:
             continue
+        fresh_caption = director.fresh(
+            action_candidates(action, rival, caption),
+            category=f"story:{story_type}:{action}",
+        )
         beats.append({
             "time": round(float(t), 2),
             "actor": actor,
             "driver": rival if actor == "featured" else None,
             "action": action,
-            "caption": caption.format(rival=rival),
+            "caption": fresh_caption,
         })
     return {
         "type": story_type,

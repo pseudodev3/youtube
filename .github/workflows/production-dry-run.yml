@@ -1,0 +1,215 @@
+name: GRIDLOOP production dry run
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - map-rebuild
+    paths:
+      - ".github/workflows/production-dry-run.yml"
+      - ".github/production-dry-run-now"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gridloop-production-dry-run
+  cancel-in-progress: true
+
+jobs:
+  production-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FPS: "30"
+      DURATION: "24"
+      MAX_RENDER_ATTEMPTS: "3"
+      GRIDLOOP_OUTPUT_DIR: "output/production-dry-run"
+      CAREER_PATH: "/tmp/gridloop-dry-run-career.json"
+      YOUTUBE_UPLOAD_ENABLED: "false"
+      YOUTUBE_PRIVACY_STATUS: "private"
+
+    steps:
+      - name: Checkout map rebuild
+        uses: actions/checkout@v4
+
+      - name: Snapshot isolated career
+        run: |
+          cp career_state.json "$CAREER_PATH"
+          sha256sum career_state.json > /tmp/career-before.sha256
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install production dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core g++
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build production C++ map engine
+        run: |
+          g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
+          chmod +x cpp/map_engine
+          ./cpp/map_engine mountain 130013 6 30 > /tmp/native-smoke.txt
+          grep -q '^S|' /tmp/native-smoke.txt
+          grep -q '^P|' /tmp/native-smoke.txt
+          grep -q '^O|' /tmp/native-smoke.txt
+
+      - name: Prove uploads are disabled
+        run: |
+          python - <<'PY'
+          import os
+          from youtube_upload import upload_enabled
+          assert os.environ["YOUTUBE_UPLOAD_ENABLED"] == "false"
+          assert upload_enabled() is False
+          print("YouTube upload path is hard-disabled for this dry run.")
+          PY
+
+      - name: Smoke test Audio V2 across all 15 maps
+        run: |
+          python - <<'PY'
+          import tempfile
+          import wave
+          from pathlib import Path
+          from audio import synthesize_audio
+
+          tracks = [
+              "training", "country", "mountain", "night_city", "rain",
+              "coast", "snow", "canyon", "desert", "forest",
+              "street", "tunnel", "neon_rain", "alpine", "extreme_canyon",
+          ]
+          fps = 30
+          frames = 18
+          speeds = [0.54 + i * 0.012 for i in range(frames)]
+          crashes = [False] * frames
+          impacts = [0.0] * frames
+          sides = [0.0] * frames
+          events = [None] * frames
+          events[10] = "CLEAN PASS!"
+          states = ["build"] * 6 + ["battle"] * 8 + ["finale"] * 4
+          slips = [0.0] * 7 + [0.006] * 6 + [0.0] * 5
+          angles = [0.0] * 7 + [0.38] * 6 + [0.0] * 5
+          loads = [0.25] * 6 + [-0.45] * 4 + [0.18] * 8
+
+          with tempfile.TemporaryDirectory() as td:
+              root = Path(td)
+              for track in tracks:
+                  path = root / f"{track}.wav"
+                  synthesize_audio(
+                      path, speeds, crashes, impacts, sides, events, states, fps,
+                      sample_rate=8000,
+                      seed=130013,
+                      drift_slips=slips,
+                      drift_angles=angles,
+                      longitudinal_loads=loads,
+                      track_key=track,
+                      story_type="clean_duel",
+                  )
+                  with wave.open(str(path), "rb") as wf:
+                      assert wf.getnchannels() == 2
+                      assert wf.getnframes() > 3000
+              print("Audio V2 matrix passed for all 15 maps.")
+          PY
+
+      - name: Stress test non-repeating captions
+        run: |
+          python - <<'PY'
+          import random
+          from captioning import CaptionDirector, caption_hash, runtime_candidates
+          from story_beats import STORY_TEMPLATES, build_story
+
+          used = set()
+          story_types = list(STORY_TEMPLATES)
+          rivals = ["BLUE","GREEN","ORANGE","PURPLE","WHITE","CYAN","LIME"]
+
+          for episode in range(1, 301):
+              story_type = story_types[(episode - 1) % len(story_types)]
+              rival = rivals[(episode * 3) % len(rivals)]
+              seed = episode * 10007 + 7919
+              story = build_story(
+                  story_type,
+                  rival,
+                  random.Random(seed),
+                  duration=24.0,
+                  episode=episode,
+                  seed=seed,
+                  used_caption_hashes=used,
+              )
+              lines = [story["hook"]] + [b["caption"] for b in story["beats"]]
+              assert len(lines) == len(set(lines)), (episode, lines)
+              for line in lines:
+                  h = caption_hash(line)
+                  assert h not in used, (episode, line)
+                  used.add(h)
+
+              director = CaptionDirector(seed ^ 0xCAFE, episode, used)
+              for raw in (
+                  "RED GETS ONE!", "COUNTERSTEER!", "HUGE HIT! 💥",
+                  "WHEEL TO WHEEL!", "RED'S BACK!", "TARGET CLEARED! P4 🔥",
+              ):
+                  line = director.fresh(runtime_candidates(raw), category=f"stress:{raw}")
+                  h = caption_hash(line)
+                  assert h not in used, (episode, line)
+                  used.add(h)
+
+          print(f"Caption endurance passed: {len(used)} unique lines across 300 simulated episodes.")
+          PY
+
+      - name: Run full production stack
+        env:
+          GITHUB_EVENT_NAME: production_dry_run
+        run: python main.py
+
+      - name: Validate production result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          out = Path("output/production-dry-run")
+          status = json.loads((out / "run_status.json").read_text())
+          qc = json.loads((out / "qc.json").read_text())
+          telemetry = json.loads((out / "telemetry.json").read_text())
+          metadata = json.loads((out / "metadata.json").read_text())
+
+          assert status["status"] == "preview", status
+          assert qc["passed"] is True, qc
+          assert qc["score"] >= 72, qc
+          assert qc["probes"]["width"] == 1080
+          assert qc["probes"]["height"] == 1920
+          assert qc["probes"]["has_audio"] is True
+          assert 23.8 <= float(qc["probes"]["duration"]) <= 24.3
+          assert telemetry["starting_cars"] == 8
+          assert telemetry["event_count"] >= 3
+          assert telemetry["has_final_result"] is True
+          captions = [x for x in telemetry.get("captions_used", []) if x]
+          assert captions, "caption telemetry missing"
+          assert len(captions) == len(set(captions)), captions
+          assert metadata["privacy_status"] == "public" or metadata["privacy_status"] == "private"
+          assert list(out.glob("episode_*.mp4")), "final MP4 missing"
+
+          print("FULL PRODUCTION DRY RUN PASSED")
+          print("QC:", qc["score"], qc["issues"])
+          print("Track:", metadata["track"])
+          print("Title:", metadata["title"])
+          print("Final position:", telemetry["final_position"])
+          print("Events:", telemetry["event_count"])
+          PY
+
+      - name: Verify repository career was untouched
+        run: |
+          sha256sum -c /tmp/career-before.sha256
+          git diff --exit-code -- career_state.json
+
+      - name: Upload full production artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gridloop-production-dry-run
+          path: output/production-dry-run/
+          if-no-files-found: error
+          retention-days: 7

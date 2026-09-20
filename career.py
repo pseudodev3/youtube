@@ -5,6 +5,7 @@ import os
 from copy import deepcopy
 from pathlib import Path
 
+from captioning import caption_hash
 from track_system import unlocked_roads
 
 CAREER_PATH = Path(os.getenv("CAREER_PATH", "career_state.json"))
@@ -45,6 +46,7 @@ def default_career() -> dict:
         "last_title": None,
         "rivals": _default_rivals(),
         "history": [],
+        "caption_hashes": [],
     }
 
 
@@ -73,6 +75,11 @@ def normalize_career(career: dict) -> dict:
     merged["road_tier"] = max(1, len(merged["unlocked_roads"]))
     merged["car_tier"] = min(6, 1 + int(float(merged["driver_skill"]) * 6))
     merged["history"] = list(merged.get("history", []))[-30:]
+    # All-time exact caption memory is stored as compact hashes so the series can
+    # avoid repeating on-screen lines indefinitely without bloating history.
+    merged["caption_hashes"] = list(dict.fromkeys(
+        str(x) for x in merged.get("caption_hashes", []) if str(x)
+    ))
     merged["version"] = 2
     return merged
 
@@ -123,6 +130,15 @@ def apply_uploaded_episode(
     out["last_video_id"] = video_id
     if metadata and metadata.get("title"):
         out["last_title"] = str(metadata["title"])
+
+    caption_hashes = list(out.get("caption_hashes", []))
+    known_hashes = set(caption_hashes)
+    for text in telemetry.get("captions_used", []) or []:
+        h = caption_hash(str(text))
+        if h not in known_hashes:
+            caption_hashes.append(h)
+            known_hashes.add(h)
+    out["caption_hashes"] = caption_hashes
 
     featured = str(plan.get("featured_rival", "BLUE"))
     rival = out["rivals"].setdefault(featured, _default_rivals().get(featured, {}))

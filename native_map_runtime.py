@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 import os
+import random
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -105,6 +107,98 @@ def has_scene(track: str, episode: int) -> bool:
     return _scene(track, episode) is not None
 
 
+def _draw_sky_details(draw: ImageDraw.ImageDraw, track: str, episode: int) -> None:
+    rng = random.Random(episode * 7919 + sum(ord(ch) for ch in track) * 131)
+
+    def cloud(cx: int, cy: int, scale: float, color: tuple[int, int, int, int]) -> None:
+        w = int(150 * scale)
+        h = int(38 * scale)
+        draw.ellipse([cx-w, cy-h, cx+w, cy+h], fill=color)
+        draw.ellipse([cx-int(w*.55), cy-int(h*1.55), cx+int(w*.18), cy+int(h*.70)], fill=color)
+        draw.ellipse([cx-int(w*.10), cy-int(h*1.25), cx+int(w*.72), cy+int(h*.75)], fill=color)
+
+    if track == "training":
+        draw.ellipse([820, 108, 900, 188], fill=(255, 239, 181, 145))
+        draw.line([(120, 220), (410, 190)], fill=(238, 246, 249, 42), width=5)
+    elif track == "country":
+        draw.ellipse([815, 125, 910, 220], fill=(255, 224, 143, 185))
+        cloud(230 + rng.randrange(-35, 36), 205, .72, (245, 242, 221, 70))
+        cloud(630 + rng.randrange(-40, 41), 255, .55, (245, 242, 221, 50))
+    elif track == "mountain":
+        cloud(210, 195, .82, (225, 234, 238, 58))
+        cloud(790, 235, .62, (218, 229, 234, 44))
+        draw.rectangle([0, 360, W, 500], fill=(193, 208, 216, 18))
+    elif track == "night_city":
+        draw.ellipse([825, 98, 895, 168], fill=(232, 238, 226, 180))
+        for _ in range(18):
+            x=rng.randrange(35, W-35); y=rng.randrange(70, 390)
+            r=1 if rng.random()<.8 else 2
+            draw.ellipse([x-r,y-r,x+r,y+r], fill=(220, 230, 245, rng.randrange(70,145)))
+        draw.rectangle([0, 385, W, 555], fill=(71, 77, 109, 25))
+    elif track == "rain":
+        for cx,cy,s in ((180,150,.85),(470,125,.95),(790,165,.9),(1010,135,.72)):
+            cloud(cx, cy, s, (63, 75, 83, 150))
+        draw.rectangle([0, 300, W, 520], fill=(83, 98, 108, 35))
+    elif track == "coast":
+        draw.ellipse([820, 92, 925, 197], fill=(255, 228, 136, 205))
+        draw.rectangle([0, 420, W, 510], fill=(210, 237, 244, 28))
+        draw.rectangle([350, 500, 760, 506], fill=(240, 250, 250, 70))
+    elif track == "snow":
+        cloud(250, 190, .78, (246, 250, 251, 78))
+        cloud(770, 235, .66, (241, 247, 249, 60))
+        draw.ellipse([820, 115, 895, 190], fill=(244, 248, 247, 120))
+    elif track == "canyon":
+        draw.ellipse([830, 100, 930, 200], fill=(255, 205, 118, 175))
+        draw.rectangle([0, 400, W, 535], fill=(225, 145, 91, 28))
+    elif track == "desert":
+        draw.ellipse([790, 90, 930, 230], fill=(255, 214, 105, 220))
+        draw.rectangle([0, 410, W, 545], fill=(243, 183, 107, 34))
+        for y in (470, 492, 514):
+            draw.line([(90,y),(990,y)], fill=(255, 224, 162, 24), width=3)
+    elif track == "forest":
+        cloud(420, 210, .70, (196, 215, 207, 34))
+        draw.rectangle([0, 370, W, 550], fill=(157, 183, 169, 25))
+    elif track == "street":
+        draw.rectangle([0, 310, W, 515], fill=(142, 151, 161, 25))
+        cloud(215, 190, .62, (198, 205, 211, 36))
+        cloud(835, 220, .54, (195, 201, 209, 28))
+    elif track == "tunnel":
+        draw.ellipse([420, 260, 660, 430], fill=(235, 211, 145, 22))
+    elif track == "neon_rain":
+        draw.rectangle([0, 305, W, 545], fill=(81, 48, 116, 30))
+        draw.ellipse([110, 235, 420, 500], fill=(31, 208, 245, 16))
+        draw.ellipse([650, 210, 1030, 520], fill=(255, 55, 200, 15))
+    elif track == "alpine":
+        draw.ellipse([790, 78, 900, 188], fill=(252, 249, 220, 185))
+        draw.ellipse([750, 45, 940, 235], fill=(236, 246, 249, 32))
+        cloud(250, 215, .55, (246, 250, 251, 45))
+    elif track == "extreme_canyon":
+        draw.ellipse([820, 98, 920, 198], fill=(245, 168, 91, 160))
+        draw.rectangle([0, 345, W, 555], fill=(176, 78, 62, 38))
+
+
+def _draw_distance_haze(draw: ImageDraw.ImageDraw, track: str) -> None:
+    haze = {
+        "training": (221, 231, 232, 12),
+        "country": (244, 218, 160, 25),
+        "mountain": (190, 205, 211, 30),
+        "night_city": (72, 83, 113, 20),
+        "rain": (145, 160, 166, 38),
+        "coast": (203, 232, 238, 24),
+        "snow": (229, 239, 243, 33),
+        "canyon": (236, 165, 111, 26),
+        "desert": (246, 190, 116, 31),
+        "forest": (154, 177, 163, 24),
+        "street": (151, 157, 164, 20),
+        "tunnel": (176, 159, 119, 10),
+        "neon_rain": (104, 66, 139, 29),
+        "alpine": (207, 225, 234, 34),
+        "extreme_canyon": (218, 120, 91, 38),
+    }.get(track)
+    if haze:
+        draw.rectangle([0, 455, W, 690], fill=haze)
+
+
 def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
     scene = _scene(track, episode)
     if scene is None:
@@ -115,8 +209,14 @@ def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
         t = y / 620.0
         c = tuple(int(top[i] * (1.0 - t) + bottom[i] * t) for i in range(3))
         draw.rectangle([0, y, W, y + 10], fill=c + (255,))
+
+    _draw_sky_details(draw, track, episode)
+
     for color, pts in scene["terrain"]:
         draw.polygon(pts, fill=color)
+
+    # Atmosphere sits behind the road/cars but in front of distant terrain.
+    _draw_distance_haze(draw, track)
     return True
 
 
@@ -150,6 +250,60 @@ def _pine(d: ImageDraw.ImageDraw, x: float, y: float, s: float, snowy: bool = Fa
             d.line([(x-width*.68*s,cy+5*s),(x+width*.68*s,cy+5*s)], fill=(239,246,249,225), width=max(2,int(4*s)))
 
 
+_OBJECT_HALF_WIDTH = {
+    "tree": 38, "tree_dark": 40, "pine": 38, "pine_snow": 40,
+    "fence": 36, "hedge": 44, "utility_pole": 28, "signboard": 38,
+    "rock": 32, "cactus": 28, "barrier": 42, "guardrail": 42,
+    "bollard": 8, "lamp": 30, "tunnel_light": 30, "warning": 28,
+    "snowbank": 42, "palm": 44, "neon": 31,
+    "floodlight": 34, "haybale": 34, "scrub": 30,
+    "streetlight": 38, "reflector": 9, "snowpole": 10,
+    "city_sign": 38, "vent": 34,
+}
+
+
+def _road_safe_pose(frame, obj: dict[str, Any]) -> tuple[float, float]:
+    """Project a native prop using the same perspective depth as the live road."""
+    if frame is None:
+        return float(obj["x"]), float(obj["y"])
+
+    side = -1.0 if float(obj["x"]) < W / 2 else 1.0
+
+    # C++ encodes perspective depth into scale as 0.28 + p*1.15. Recovering p
+    # from scale is exact and avoids mixing the old roadside y projection with
+    # renderer.py's road projection.
+    scale = float(obj.get("scale", 1.0))
+    p = max(0.0, min(1.0, (scale - 0.28) / 1.15))
+
+    shake = float(getattr(frame, "shake", 0.0))
+    horizon = 600.0 + shake * 1.2
+    projected_y = horizon + (p ** 1.72) * (H - horizon)
+
+    road_curve = float(getattr(frame, "road_curve", 0.0))
+    road_curve_far = float(getattr(frame, "road_curve_far", 0.0))
+    t = float(getattr(frame, "t", 0.0))
+    heading = float(getattr(getattr(frame, "player", None), "heading", 0.0))
+    center = (
+        W / 2
+        + road_curve * (p ** 1.62) * 700
+        + road_curve_far * math.sin(p * math.pi) * 300
+        + math.sin(t * 0.14 + p * 3.0) * 50 * p
+        + heading * 18
+    )
+
+    width_mul = float(getattr(frame, "road_width", 0.82)) / 0.82
+    half_road = (65 + (p ** 1.28) * 980) * width_mul
+    shoulder = 28 + p * 30
+    radius = _OBJECT_HALF_WIDTH.get(str(obj.get("kind")), 30) * scale
+
+    # Near-camera props get more breathing room. A baseline 30px also absorbs
+    # camera punch from collisions that is intentionally not part of map data.
+    safety = 30 + 30 * p
+    jitter = (int(obj.get("variant", 0)) % 3) * 9 * scale
+    projected_x = center + side * (half_road + shoulder + radius + safety + jitter)
+    return projected_x, projected_y
+
+
 def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
     kind = obj["kind"]
     x, y, s = obj["x"], obj["y"], obj["scale"]
@@ -167,6 +321,30 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
         d.rounded_rectangle([x-2.3*s,y-42*s,x+2.3*s,y+3*s],radius=max(1,int(1.5*s)),fill=wood)
         d.line([(x-34*s,y-29*s),(x+34*s,y-29*s)],fill=(116,80,45,220),width=max(2,int(2.2*s)))
         d.line([(x-34*s,y-14*s),(x+34*s,y-14*s)],fill=(142,99,56,205),width=max(2,int(1.8*s)))
+    elif kind == "hedge":
+        # Low, dense rural hedge. Keep it visually separate from full trees.
+        dark = (67,91+v*2,45,238)
+        light = (92,113+v*2,54,220)
+        d.rounded_rectangle([x-42*s,y-34*s,x+42*s,y+4*s],radius=max(3,int(10*s)),fill=dark)
+        d.ellipse([x-35*s,y-48*s,x-1*s,y-12*s],fill=light)
+        d.ellipse([x-4*s,y-50*s,x+34*s,y-10*s],fill=light)
+    elif kind == "utility_pole":
+        wood = (82,61,43,245)
+        wire = (55,54,51,190)
+        d.rectangle([x-3.5*s,y-112*s,x+3.5*s,y],fill=wood)
+        d.line([(x-25*s,y-96*s),(x+25*s,y-96*s)],fill=wood,width=max(2,int(4*s)))
+        d.ellipse([x-19*s,y-101*s,x-13*s,y-95*s],fill=(218,214,190,220))
+        d.ellipse([x+13*s,y-101*s,x+19*s,y-95*s],fill=(218,214,190,220))
+        side = 1 if x < W/2 else -1
+        d.line([(x+side*18*s,y-98*s),(x+side*62*s,y-88*s)],fill=wire,width=max(1,int(1.5*s)))
+    elif kind == "signboard":
+        post = (67,72,75,242)
+        panel = (226,229,225,242)
+        accent = (206,61,52,235)
+        d.rectangle([x-3*s,y-64*s,x+3*s,y],fill=post)
+        d.rounded_rectangle([x-34*s,y-92*s,x+34*s,y-58*s],radius=max(2,int(4*s)),fill=panel)
+        d.rectangle([x-29*s,y-86*s,x+29*s,y-79*s],fill=accent)
+        d.rectangle([x-23*s,y-73*s,x+16*s,y-68*s],fill=(84,90,94,210))
     elif kind == "rock":
         shade=(99+v*7,88+v*5,76+v*3,238)
         d.polygon([(x-27*s,y),(x-18*s,y-28*s),(x+7*s,y-38*s),(x+30*s,y-9*s),(x+20*s,y+4*s)],fill=shade)
@@ -193,10 +371,61 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
             d.ellipse([lx-8*s,y-86*s,lx+8*s,y-72*s],fill=(255,218,126,215))
         else:
             d.rounded_rectangle([x-24*s,y-88*s,x+24*s,y-78*s],radius=max(2,int(3*s)),fill=(246,226,168,220))
+    elif kind == "streetlight":
+        pole=(37,42,48,245)
+        inward = 1 if x < W/2 else -1
+        lx=x+inward*30*s
+        ly=y-104*s
+        # Warm halo first, then the actual fixture so the light reads at phone size.
+        d.ellipse([lx-30*s,ly-25*s,lx+30*s,ly+25*s],fill=(255,209,116,42))
+        d.ellipse([lx-17*s,ly-14*s,lx+17*s,ly+14*s],fill=(255,220,139,68))
+        d.rectangle([x-3*s,y-101*s,x+3*s,y],fill=pole)
+        d.line([(x,y-98*s),(lx,ly)],fill=pole,width=max(2,int(4*s)))
+        d.rounded_rectangle([lx-10*s,ly-5*s,lx+10*s,ly+5*s],radius=max(1,int(2*s)),fill=(255,226,153,238))
+        d.ellipse([lx-42*s,y-5*s,lx+42*s,y+12*s],fill=(255,205,112,20))
+    elif kind == "reflector":
+        d.rectangle([x-3*s,y-42*s,x+3*s,y],fill=(212,216,211,238))
+        d.rectangle([x-5*s,y-35*s,x+5*s,y-27*s],fill=(245,244,222,235))
+        d.ellipse([x-8*s,y-39*s,x+8*s,y-23*s],fill=(210,235,255,36))
+    elif kind == "snowpole":
+        d.rectangle([x-3*s,y-75*s,x+3*s,y],fill=(225,230,230,245))
+        d.rectangle([x-4*s,y-68*s,x+4*s,y-54*s],fill=(219,63,56,235))
+        d.rectangle([x-4*s,y-42*s,x+4*s,y-28*s],fill=(219,63,56,235))
+    elif kind == "city_sign":
+        pole=(52,57,63,240)
+        panel=(48,59+v*5,70+v*3,242)
+        d.rectangle([x-3*s,y-72*s,x+3*s,y],fill=pole)
+        d.rounded_rectangle([x-36*s,y-102*s,x+36*s,y-69*s],radius=max(2,int(5*s)),fill=panel)
+        d.rectangle([x-27*s,y-94*s,x+23*s,y-88*s],fill=(221,224,217,210))
+        d.rectangle([x-27*s,y-82*s,x+10*s,y-77*s],fill=(157,196,219,180))
+    elif kind == "vent":
+        metal=(66,69,73,238)
+        d.rounded_rectangle([x-30*s,y-52*s,x+30*s,y+3*s],radius=max(2,int(5*s)),fill=metal)
+        for yy in range(4):
+            y0=y-(42-yy*10)*s
+            d.line([(x-22*s,y0),(x+22*s,y0)],fill=(31,34,38,220),width=max(1,int(2*s)))
     elif kind == "warning":
         d.rectangle([x-3*s,y-58*s,x+3*s,y],fill=(60,54,46,240))
         d.polygon([(x,y-82*s),(x-24*s,y-47*s),(x+24*s,y-47*s)],fill=(255,207,57,240))
         d.polygon([(x,y-72*s),(x-12*s,y-52*s),(x+12*s,y-52*s)],fill=(43,39,34,220))
+    elif kind == "floodlight":
+        pole=(64,69,72,242)
+        d.rectangle([x-3*s,y-118*s,x+3*s,y],fill=pole)
+        d.line([(x-24*s,y-112*s),(x+24*s,y-112*s)],fill=pole,width=max(2,int(4*s)))
+        for dx in (-18,-6,6,18):
+            d.rounded_rectangle([x+(dx-5)*s,y-121*s,x+(dx+5)*s,y-111*s],radius=max(1,int(2*s)),fill=(243,238,204,230))
+    elif kind == "haybale":
+        straw=(201,163+v*3,73,240)
+        edge=(139,108,52,220)
+        d.rounded_rectangle([x-28*s,y-34*s,x+28*s,y+3*s],radius=max(3,int(8*s)),fill=straw,outline=edge,width=max(1,int(2*s)))
+        d.line([(x-6*s,y-33*s),(x-6*s,y+2*s)],fill=edge,width=max(1,int(2*s)))
+        d.line([(x+8*s,y-33*s),(x+8*s,y+2*s)],fill=edge,width=max(1,int(2*s)))
+    elif kind == "scrub":
+        dark=(92,92,47,235)
+        light=(125,117,59,215)
+        d.ellipse([x-29*s,y-25*s,x+10*s,y+4*s],fill=dark)
+        d.ellipse([x-7*s,y-33*s,x+28*s,y+3*s],fill=light)
+        d.ellipse([x-15*s,y-40*s,x+12*s,y-6*s],fill=(111,106,52,220))
     elif kind == "snowbank":
         d.ellipse([x-38*s,y-22*s,x+40*s,y+7*s],fill=(239,246,249,222))
     elif kind == "palm":
@@ -212,7 +441,13 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
         d.ellipse([x-7*s,y-7*s,x+7*s,y+7*s],fill=(235,215,130,210))
 
 
-def draw_roadside(img: Image.Image, track: str, episode: int, frame_no: int) -> bool:
+def draw_roadside(
+    img: Image.Image,
+    track: str,
+    episode: int,
+    frame_no: int,
+    frame=None,
+) -> bool:
     scene = _scene(track, episode)
     if scene is None:
         return False
@@ -222,7 +457,12 @@ def draw_roadside(img: Image.Image, track: str, episode: int, frame_no: int) -> 
     layer = Image.new("RGBA", (W, H), (0,0,0,0))
     d = ImageDraw.Draw(layer, "RGBA")
     # Farther objects first, nearer objects last, which gives natural depth.
-    for obj in sorted(objects, key=lambda x: x["y"]):
+    for original in sorted(objects, key=lambda x: x["y"]):
+        obj = dict(original)
+        obj["x"], obj["y"] = _road_safe_pose(frame, obj)
+        s = float(obj.get("scale", 1.0))
+        if obj["x"] < -140 * s or obj["x"] > W + 140 * s:
+            continue
         _draw_object(d, obj)
     img.paste(layer, (0,0), layer)
     return True

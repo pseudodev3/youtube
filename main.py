@@ -60,7 +60,14 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     episode = int(plan["episode"])
     skill = float(career["driver_skill"])
     seed = int(plan["seed"])
-    engine = RaceEngine(skill=skill, seed=seed, duration=DURATION, fps=FPS, plan=plan)
+    engine = RaceEngine(
+        skill=skill,
+        seed=seed,
+        duration=DURATION,
+        fps=FPS,
+        plan=plan,
+        used_caption_hashes=career.get("caption_hashes", []),
+    )
 
     target = OUT / f"episode_{episode:03d}.mp4"
     video_only = OUT / f"episode_{episode:03d}.video.mp4"
@@ -94,6 +101,9 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     impact_sides: list[float] = []
     event_texts: list[str | None] = []
     music_states: list[str] = []
+    drift_slips: list[float] = []
+    drift_angles: list[float] = []
+    longitudinal_loads: list[float] = []
 
     starting_cars = 0
     positions: list[int] = []
@@ -146,6 +156,9 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
             impact_sides.append(strongest_side)
             event_texts.append(rf.event_text)
             music_states.append(music_state_at(plan, rf.t))
+            drift_slips.append(float(rf.player.drift_slip))
+            drift_angles.append(float(rf.player.drift_angle))
+            longitudinal_loads.append(float(getattr(rf, "player_longitudinal_g", 0.0)))
 
             if featured and featured.active and 0.0 < featured.z < 1.18:
                 featured_visible_frames += 1
@@ -207,6 +220,11 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         music_states,
         FPS,
         seed=seed,
+        drift_slips=drift_slips,
+        drift_angles=drift_angles,
+        longitudinal_loads=longitudinal_loads,
+        track_key=str(plan.get("track", {}).get("key", "training")),
+        story_type=str(plan.get("story_type", "")),
     )
 
     mux = [
@@ -258,6 +276,10 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         "max_event_gap_seconds": round(max(gaps or [DURATION]), 3),
         "has_final_result": has_final_result,
         "music_states_used": sorted(set(music_states)),
+        "captions_used": list(dict.fromkeys(
+            [str(plan.get("hook", "")).strip()]
+            + [str(item.get("text", "")).strip() for item in event_log]
+        )),
     }
     return target, telemetry
 

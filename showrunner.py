@@ -97,7 +97,15 @@ def plan_episode(career: dict, attempt: int = 0, duration: float = 24.0) -> Epis
     featured = _choose_featured_rival(career, rng)
     target = _target_position(skill, career, rng)
     story_type = choose_story_type(rng, career, featured)
-    story = build_story(story_type, featured, rng, duration=duration)
+    story = build_story(
+        story_type,
+        featured,
+        rng,
+        duration=duration,
+        episode=episode,
+        seed=seed,
+        used_caption_hashes=career.get("caption_hashes", []),
+    )
     track = choose_track(career, rng)
 
     objective = f"TARGET P{target} • BEAT {featured} • {track['variant'].upper()}"
