@@ -375,40 +375,51 @@ class CaptionDirector:
                 self.reserve(text)
                 return text
 
-        # Combinatorial grammar makes the bank effectively inexhaustible.
-        start = self.counter + self.episode * 17
-        total = (
-            len(GENERIC_LEADS)
-            * len(GENERIC_VERBS)
-            * len(GENERIC_TAILS)
-            * len(GENERIC_FINISHES)
+        # Deep fallback stays anchored to the same semantic event. We vary an
+        # authored candidate rather than switching to unrelated generic race copy,
+        # so a pass is always captioned as a pass, a crash as a crash, etc.
+        modifiers = (
+            "AGAIN", "THIS TIME", "UNDER PRESSURE", "AT THE LIMIT",
+            "WITH NO ROOM", "AT RACE SPEED", "WHEN IT COUNTS",
+            "IN TRAFFIC", "ON THE ATTACK", "IN THE BRAKING ZONE",
+            "WITH THE PACK CLOSE", "WITHOUT HESITATION",
+            "AS THE GAP OPENS", "BEFORE THE NEXT CORNER",
+            "WHILE THE PRESSURE BUILDS", "WITH EVERYTHING MOVING",
         )
-        stride = 7919  # prime, giving a long deterministic walk through the grammar space
+        contexts = (
+            "", "RIGHT NOW", "ON THIS LAP", "IN THIS SECTOR",
+            "WITH RED COMMITTED", "AS THE FIELD CLOSES",
+            "BEFORE IT SHUTS", "WITH NO EASY EXIT",
+            "AND THE FIGHT CONTINUES", "WITH THE NEXT MOVE COMING",
+            "AS THE ROAD TIGHTENS", "WHILE THE PACK RESPONDS",
+        )
+
+        start = self.counter + self.episode * 17
+        total = len(pool) * len(modifiers) * len(contexts)
+        stride = 1543  # coprime with the current grammar dimensions
         for offset in range(total):
             idx = (start + offset * stride) % total
-            lead_n = len(GENERIC_LEADS)
-            verb_n = len(GENERIC_VERBS)
-            tail_n = len(GENERIC_TAILS)
-            a = GENERIC_LEADS[idx % lead_n]
-            b = GENERIC_VERBS[(idx // lead_n) % verb_n]
-            tail_index = (idx // (lead_n * verb_n)) % tail_n
-            finish_index = (idx // (lead_n * verb_n * tail_n)) % len(GENERIC_FINISHES)
-            c = GENERIC_TAILS[tail_index]
-            finish = GENERIC_FINISHES[finish_index]
-            text = f"{a} {b} {c}" + (f" {finish}" if finish else "")
+            anchor = pool[idx % len(pool)]
+            modifier = modifiers[(idx // len(pool)) % len(modifiers)]
+            context = contexts[
+                (idx // (len(pool) * len(modifiers))) % len(contexts)
+            ]
+            text = f"{anchor} — {modifier}" + (f" {context}" if context else "")
             if self._available(text):
                 self.reserve(text)
                 self.counter += offset + 1
                 return text
 
-        # Absolute safety valve. Reaching this means exhausting the authored
-        # banks plus the entire combinatorial grammar. Race + moment identity
-        # still makes the line globally unique instead of repeating or failing.
+        # Absolute safety valve: still preserve the event semantics by keeping
+        # the original candidate as the anchor. Episode/moment identity is used
+        # only after thousands of same-category variations have been exhausted.
         moment = self.counter + 1
-        text = f"THE FIGHT FINDS ANOTHER MOMENT — RACE {self.episode} / {moment}"
+        anchor = pool[(self.episode + moment) % len(pool)]
+        text = f"{anchor} — RACE {self.episode} / MOMENT {moment}"
         while not self._available(text):
             moment += 1
-            text = f"THE FIGHT FINDS ANOTHER MOMENT — RACE {self.episode} / {moment}"
+            anchor = pool[(self.episode + moment) % len(pool)]
+            text = f"{anchor} — RACE {self.episode} / MOMENT {moment}"
         self.reserve(text)
         self.counter = moment
         return text
