@@ -25,7 +25,11 @@ from main import render_video
 from showrunner import plan_episode
 from track_system import ROAD_CATALOG
 
-TRACKS = ("training", "country", "mountain", "canyon", "night_city", "coast", "forest", "desert")
+TRACKS = (
+    "training", "country", "mountain", "night_city", "rain",
+    "coast", "snow", "canyon", "desert", "forest",
+    "street", "tunnel", "neon_rain", "alpine", "extreme_canyon",
+)
 OUT = Path(os.environ["GRIDLOOP_OUTPUT_DIR"])
 OUT.mkdir(parents=True, exist_ok=True)
 
