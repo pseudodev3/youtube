@@ -1,0 +1,82 @@
+from __future__ import annotations
+
+import json
+import os
+import shutil
+from pathlib import Path
+
+# These must be set before importing main.py because its render constants are
+# resolved at import time.
+os.environ.setdefault("FPS", "24")
+os.environ.setdefault("DURATION", "8")
+os.environ["YOUTUBE_UPLOAD_ENABLED"] = "false"
+os.environ.setdefault("GRIDLOOP_OUTPUT_DIR", "output/map-previews")
+
+from career import load_career
+from main import render_video
+from showrunner import plan_episode
+from track_system import ROAD_CATALOG
+
+TRACKS = ("training", "country", "mountain", "canyon")
+OUT = Path(os.environ["GRIDLOOP_OUTPUT_DIR"])
+OUT.mkdir(parents=True, exist_ok=True)
+
+
+def forced_track(key: str) -> dict:
+    cfg = ROAD_CATALOG[key]
+    variant = cfg["variants"][0]
+    return {
+        "key": key,
+        "theme": cfg["theme"],
+        "name": f"{cfg['display']} — {variant}",
+        "variant": variant,
+        "curve_scale": float(cfg["curve_scale"]),
+        "section_len": float(cfg["section_len"]),
+        "width_scale": float(cfg["width_scale"]),
+        "music_tension": float(cfg["music_tension"]),
+        "difficulty": 0.75,
+    }
+
+
+def main() -> None:
+    career = load_career()
+    # One deterministic race plan for every world. Only the map changes.
+    base = plan_episode(career, attempt=0, duration=float(os.environ["DURATION"])).to_dict()
+    manifest = []
+
+    for key in TRACKS:
+        plan = json.loads(json.dumps(base))
+        plan["track"] = forced_track(key)
+        plan["objective_text"] = f"MAP PREVIEW • {key.upper()}"
+
+        rendered, telemetry = render_video(career, plan)
+        destination = OUT / f"{key}.mp4"
+        if destination.exists():
+            destination.unlink()
+        shutil.move(str(rendered), destination)
+
+        # Grab a representative frame from the same full renderer for quick visual review.
+        still = OUT / f"{key}.jpg"
+        os.system(
+            "ffmpeg -y -v error -ss 4 -i "
+            + repr(str(destination))
+            + " -frames:v 1 -q:v 2 "
+            + repr(str(still))
+        )
+
+        manifest.append({
+            "track": key,
+            "video": destination.name,
+            "still": still.name,
+            "story_type": plan.get("story_type"),
+            "featured_rival": plan.get("featured_rival"),
+            "events": telemetry.get("event_count"),
+            "final_position": telemetry.get("final_position"),
+        })
+        print(f"MAP PREVIEW complete: {key} -> {destination}")
+
+    (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+if __name__ == "__main__":
+    main()
