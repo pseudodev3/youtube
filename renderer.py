@@ -118,19 +118,37 @@ def _car(
     draw.rounded_rectangle([cx-sw*.40,by(cy+sh*.37),cx+sw*.40,by(cy+sh*.44)],radius=max(2,int(7*scale)),fill=carbon)
     draw.rounded_rectangle([cx-sw*.28,by(cy+sh*.335),cx+sw*.28,by(cy+sh*.375)],radius=max(2,int(5*scale)),fill=accent)
 
+    # Rear lamps are deliberately *red*, not amber. When braking, intensity and
+    # halo increase while hue stays pinned to racing red.
     if player:
         lamp_y=by(cy+sh*.285)
         lamp_y2=by(cy+sh*.337)
-        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y2],radius=max(2,int(4*scale)),fill=(255,219,92,255))
-        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y2],radius=max(2,int(4*scale)),fill=(255,219,92,255))
+        side_off=(76,4,4,185)
+        side_on=(255,0,0,255)
+        side_fill=side_on if brake >= .08 else side_off
+        if brake >= .08:
+            side_glow=int(58+72*brake)
+            for side in (-1,1):
+                lx=cx+side*sw*.088
+                draw.ellipse(
+                    [lx-18*scale,lamp_y-9*scale,lx+18*scale,lamp_y2+9*scale],
+                    fill=(255,0,0,side_glow),
+                )
+        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y2],radius=max(2,int(4*scale)),fill=side_fill)
+        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y2],radius=max(2,int(4*scale)),fill=side_fill)
 
-    # F1-style rear rain/brake light. Glow scales with actual braking state.
+    # F1-style central rear rain/brake light. Hue remains pure red at every level.
     rear_y=by(cy+sh*.315)
-    base_alpha=95 if brake < .08 else int(130 + 110*brake)
-    glow_r=(10 + 13*brake)*scale
-    draw.ellipse([cx-glow_r,rear_y-glow_r*.65,cx+glow_r,rear_y+glow_r*.65],fill=(255,38,28,int(28+72*brake)))
-    lamp_r=max(2.0,4.2*scale)
-    draw.ellipse([cx-lamp_r,rear_y-lamp_r,cx+lamp_r,rear_y+lamp_r],fill=(255,52,38,base_alpha))
+    active=brake >= .08
+    base_fill=(255,0,0,255) if active else (82,3,3,175)
+    glow_r=(8 + 16*brake)*scale
+    glow_alpha=int(18 + 108*brake) if active else 10
+    draw.ellipse(
+        [cx-glow_r,rear_y-glow_r*.65,cx+glow_r,rear_y+glow_r*.65],
+        fill=(255,0,0,glow_alpha),
+    )
+    lamp_r=max(2.0,(4.0+1.8*brake)*scale)
+    draw.ellipse([cx-lamp_r,rear_y-lamp_r,cx+lamp_r,rear_y+lamp_r],fill=base_fill)
 
 
 def _rotated_car(
