@@ -93,7 +93,7 @@ def main() -> None:
     for index, key in enumerate(TRACKS):
         still = Image.open(OUT / f"{key}.jpg").convert("RGB").resize((540, 960), Image.Resampling.LANCZOS)
         draw = ImageDraw.Draw(still)
-        draw.rounded_rectangle([18, 18, 230, 64], radius=12, fill=(10, 12, 13, 205))
+        draw.rounded_rectangle([18, 18, 230, 64], radius=12, fill=(10, 12, 13))
         draw.text((32, 27), key.upper(), font=font, fill=(244, 245, 242))
         x = (index % 2) * 540
         y = (index // 2) * 960
