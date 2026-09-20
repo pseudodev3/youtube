@@ -57,11 +57,28 @@ RIVAL_PALETTES = [
 ]
 
 
-def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading: float,
-         player: bool = False, color_id: int = 0):
+def _car(
+    draw: ImageDraw.ImageDraw,
+    cx: float,
+    cy: float,
+    scale: float,
+    heading: float,
+    player: bool = False,
+    color_id: int = 0,
+    longitudinal_load: float = 0.0,
+    braking: float = 0.0,
+):
     sw = 132 * scale
     sh = 218 * scale
     dx = max(-0.08, min(0.08, heading)) * 18 * scale
+    load = max(-1.0, min(1.0, longitudinal_load))
+    brake = max(0.0, min(1.0, braking))
+
+    # Wheels remain planted. The sprung body pitches a few pixels around them:
+    # braking (negative load) nudges the nose down/rear up; acceleration reverses it.
+    def by(y: float) -> float:
+        return y - load * ((cy - y) / max(1.0, sh)) * 11.0 * scale
+
     if player:
         body=(236,54,50,255); body_light=(255,96,78,255); body_dark=(124,25,29,255)
         accent=(255,211,86,255); cockpit=(18,24,32,255)
@@ -69,42 +86,71 @@ def _car(draw: ImageDraw.ImageDraw, cx: float, cy: float, scale: float, heading:
         body,body_light,body_dark,accent=RIVAL_PALETTES[color_id % len(RIVAL_PALETTES)]
         cockpit=(13,25,46,255)
     wheel=(18,20,24,255); carbon=(28,29,33,255)
+
     draw.ellipse([cx-sw*.50,cy-sh*.10,cx+sw*.50,cy+sh*.49],fill=(0,0,0,58))
     fw,fh=sw*.15,sh*.16; rw,rh=sw*.18,sh*.19
     for side in (-1,1):
         sx=cx+side*sw*.43
         draw.rounded_rectangle([sx-fw/2,cy-sh*.24,sx+fw/2,cy-sh*.24+fh],radius=max(2,int(7*scale)),fill=wheel)
         draw.rounded_rectangle([sx-rw/2,cy+sh*.14,sx+rw/2,cy+sh*.14+rh],radius=max(2,int(8*scale)),fill=wheel)
-    wing_y=cy-sh*.42
-    draw.rounded_rectangle([cx-sw*.43+dx*.18,wing_y,cx+sw*.43+dx*.18,wing_y+sh*.055],radius=max(2,int(7*scale)),fill=carbon)
-    draw.rectangle([cx-sw*.47+dx*.18,wing_y+sh*.01,cx-sw*.39+dx*.18,wing_y+sh*.075],fill=body_dark)
-    draw.rectangle([cx+sw*.39+dx*.18,wing_y+sh*.01,cx+sw*.47+dx*.18,wing_y+sh*.075],fill=body_dark)
+
+    wing_y=by(cy-sh*.42)
+    wing_y2=by(cy-sh*.42+sh*.055)
+    draw.rounded_rectangle([cx-sw*.43+dx*.18,wing_y,cx+sw*.43+dx*.18,wing_y2],radius=max(2,int(7*scale)),fill=carbon)
+    draw.rectangle([cx-sw*.47+dx*.18,by(cy-sh*.41),cx-sw*.39+dx*.18,by(cy-sh*.345)],fill=body_dark)
+    draw.rectangle([cx+sw*.39+dx*.18,by(cy-sh*.41),cx+sw*.47+dx*.18,by(cy-sh*.345)],fill=body_dark)
+
     shell=[
-        (cx+dx,cy-sh*.48),(cx+sw*.095+dx*.70,cy-sh*.32),(cx+sw*.17+dx*.42,cy-sh*.13),
-        (cx+sw*.31+dx*.20,cy+sh*.02),(cx+sw*.27,cy+sh*.28),(cx+sw*.18,cy+sh*.43),
-        (cx-sw*.18,cy+sh*.43),(cx-sw*.27,cy+sh*.28),(cx-sw*.31+dx*.20,cy+sh*.02),
-        (cx-sw*.17+dx*.42,cy-sh*.13),(cx-sw*.095+dx*.70,cy-sh*.32),
+        (cx+dx,by(cy-sh*.48)),(cx+sw*.095+dx*.70,by(cy-sh*.32)),(cx+sw*.17+dx*.42,by(cy-sh*.13)),
+        (cx+sw*.31+dx*.20,by(cy+sh*.02)),(cx+sw*.27,by(cy+sh*.28)),(cx+sw*.18,by(cy+sh*.43)),
+        (cx-sw*.18,by(cy+sh*.43)),(cx-sw*.27,by(cy+sh*.28)),(cx-sw*.31+dx*.20,by(cy+sh*.02)),
+        (cx-sw*.17+dx*.42,by(cy-sh*.13)),(cx-sw*.095+dx*.70,by(cy-sh*.32)),
     ]
     draw.polygon(shell,fill=body)
-    draw.polygon([(cx-sw*.27,cy-sh*.04),(cx-sw*.16,cy-sh*.12),(cx-sw*.10,cy+sh*.26),(cx-sw*.21,cy+sh*.34)],fill=body_light)
-    draw.polygon([(cx+sw*.27,cy-sh*.04),(cx+sw*.16,cy-sh*.12),(cx+sw*.10,cy+sh*.26),(cx+sw*.21,cy+sh*.34)],fill=body_dark)
-    draw.polygon([(cx+dx*.90,cy-sh*.44),(cx+sw*.037,cy-sh*.19),(cx+sw*.045,cy+sh*.20),(cx-sw*.045,cy+sh*.20),(cx-sw*.037,cy-sh*.19)],fill=accent)
-    draw.ellipse([cx-sw*.13,cy-sh*.08,cx+sw*.13,cy+sh*.19],fill=cockpit)
-    draw.ellipse([cx-sw*.08,cy-sh*.035,cx+sw*.02,cy+sh*.085],fill=(80,96,111,210))
-    draw.arc([cx-sw*.12,cy-sh*.055,cx+sw*.12,cy+sh*.075],start=190,end=350,fill=(42,44,48,255),width=max(2,int(7*scale)))
-    draw.polygon([(cx-sw*.16,cy+sh*.18),(cx+sw*.16,cy+sh*.18),(cx+sw*.20,cy+sh*.37),(cx-sw*.20,cy+sh*.37)],fill=body_dark)
-    draw.rounded_rectangle([cx-sw*.40,cy+sh*.37,cx+sw*.40,cy+sh*.44],radius=max(2,int(7*scale)),fill=carbon)
-    draw.rounded_rectangle([cx-sw*.28,cy+sh*.335,cx+sw*.28,cy+sh*.375],radius=max(2,int(5*scale)),fill=accent)
+    draw.polygon([(cx-sw*.27,by(cy-sh*.04)),(cx-sw*.16,by(cy-sh*.12)),(cx-sw*.10,by(cy+sh*.26)),(cx-sw*.21,by(cy+sh*.34))],fill=body_light)
+    draw.polygon([(cx+sw*.27,by(cy-sh*.04)),(cx+sw*.16,by(cy-sh*.12)),(cx+sw*.10,by(cy+sh*.26)),(cx+sw*.21,by(cy+sh*.34))],fill=body_dark)
+    draw.polygon([(cx+dx*.90,by(cy-sh*.44)),(cx+sw*.037,by(cy-sh*.19)),(cx+sw*.045,by(cy+sh*.20)),(cx-sw*.045,by(cy+sh*.20)),(cx-sw*.037,by(cy-sh*.19))],fill=accent)
+
+    draw.ellipse([cx-sw*.13,by(cy-sh*.08),cx+sw*.13,by(cy+sh*.19)],fill=cockpit)
+    draw.ellipse([cx-sw*.08,by(cy-sh*.035),cx+sw*.02,by(cy+sh*.085)],fill=(80,96,111,210))
+    draw.arc([cx-sw*.12,by(cy-sh*.055),cx+sw*.12,by(cy+sh*.075)],start=190,end=350,fill=(42,44,48,255),width=max(2,int(7*scale)))
+    draw.polygon([(cx-sw*.16,by(cy+sh*.18)),(cx+sw*.16,by(cy+sh*.18)),(cx+sw*.20,by(cy+sh*.37)),(cx-sw*.20,by(cy+sh*.37))],fill=body_dark)
+    draw.rounded_rectangle([cx-sw*.40,by(cy+sh*.37),cx+sw*.40,by(cy+sh*.44)],radius=max(2,int(7*scale)),fill=carbon)
+    draw.rounded_rectangle([cx-sw*.28,by(cy+sh*.335),cx+sw*.28,by(cy+sh*.375)],radius=max(2,int(5*scale)),fill=accent)
+
     if player:
-        lamp_y=cy+sh*.285
-        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y+sh*.052],radius=max(2,int(4*scale)),fill=(255,219,92,255))
-        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y+sh*.052],radius=max(2,int(4*scale)),fill=(255,219,92,255))
+        lamp_y=by(cy+sh*.285)
+        lamp_y2=by(cy+sh*.337)
+        draw.rounded_rectangle([cx-sw*.14,lamp_y,cx-sw*.035,lamp_y2],radius=max(2,int(4*scale)),fill=(255,219,92,255))
+        draw.rounded_rectangle([cx+sw*.035,lamp_y,cx+sw*.14,lamp_y2],radius=max(2,int(4*scale)),fill=(255,219,92,255))
+
+    # F1-style rear rain/brake light. Glow scales with actual braking state.
+    rear_y=by(cy+sh*.315)
+    base_alpha=95 if brake < .08 else int(130 + 110*brake)
+    glow_r=(10 + 13*brake)*scale
+    draw.ellipse([cx-glow_r,rear_y-glow_r*.65,cx+glow_r,rear_y+glow_r*.65],fill=(255,38,28,int(28+72*brake)))
+    lamp_r=max(2.0,4.2*scale)
+    draw.ellipse([cx-lamp_r,rear_y-lamp_r,cx+lamp_r,rear_y+lamp_r],fill=(255,52,38,base_alpha))
 
 
-def _rotated_car(img: Image.Image,cx: float,cy: float,scale: float,angle_deg: float,player: bool=False,color_id: int=0):
+def _rotated_car(
+    img: Image.Image,
+    cx: float,
+    cy: float,
+    scale: float,
+    angle_deg: float,
+    player: bool=False,
+    color_id: int=0,
+    longitudinal_load: float=0.0,
+    braking: float=0.0,
+):
     box=int(max(300,360*scale))
     layer=Image.new("RGBA",(box,box),(0,0,0,0)); ld=ImageDraw.Draw(layer,"RGBA")
-    _car(ld,box/2,box/2,scale,0.0,player,color_id)
+    _car(
+        ld,box/2,box/2,scale,0.0,player,color_id,
+        longitudinal_load=longitudinal_load,
+        braking=braking,
+    )
     rotated=layer.rotate(-angle_deg,resample=Image.Resampling.BICUBIC,expand=True)
     img.paste(rotated,(int(cx-rotated.width/2),int(cy-rotated.height/2)),rotated)
 
