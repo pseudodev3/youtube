@@ -178,10 +178,16 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
             x += w + 20 + int(rng()%25); ++i;
         }
     } else if (k=="rain") {
-        out.push_back(rolling(W,606,20,5.0,0.8,{49,72,61,255}));
-        for (int x=-30; x<1110; x+=70) {
-            out.push_back(triangle(x+25,492,48,620,{41,64,53,238}));
+        // Wet circuit: low storm clouds, soaked tree line and service structures.
+        out.push_back(rolling(W,600,18,4.4,0.8,{43,58,56,245}));
+        for (int x=-35; x<1120; x+=82) {
+            int h = 95 + int(rng()%55);
+            out.push_back(rect(x+25,610-h,x+32,620,{45,38,32,235}));
+            out.push_back(triangle(x+28,610-h-66,36,610-h+28,{34,55,47,235}));
         }
+        out.push_back(rect(70,540,210,612,{72,77,79,225}));
+        out.push_back(rect(870,548,1010,612,{72,77,79,220}));
+        out.push_back(rect(0,585,1080,591,{174,191,198,55}));
     } else if (k=="coast") {
         out.push_back(rect(0,548,1080,760,{40,141,191,255}));
         out.push_back(rect(0,586,1080,592,{201,236,244,92}));
@@ -192,8 +198,12 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
         out.push_back({{85,108,101,190},{{520,570},{610,530},{700,548},{790,570},{790,610},{520,610}}});
         out.push_back({{255,219,111,240},{{850,250},{900,225},{950,250},{960,300},{925,340},{875,340},{840,300}}});
     } else if (k=="snow") {
-        out.push_back(peaks(W,700,360,500,7,{196,212,222,255},rng));
-        out.push_back(peaks(W,748,510,610,7,{239,245,248,250},rng));
+        // Snow Pass: soft pale ridges and deep banks, deliberately gentler than Mountain/Alpine.
+        out.push_back(ridge(W,690,365,500,5,{177,197,207,235},rng));
+        out.push_back(ridge(W,735,500,590,5,{218,229,234,245},rng));
+        out.push_back(rolling(W,635,16,3.3,0.5,{239,244,245,248}));
+        out.push_back(rect(0,610,165,680,{244,247,247,240}));
+        out.push_back(rect(915,610,1080,680,{244,247,247,240}));
     } else if (k=="canyon" || k=="extreme_canyon") {
         bool ex = k=="extreme_canyon";
         Color left = ex ? Color{88,40,37,255}:Color{132,70,48,255};
@@ -228,20 +238,41 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
             out.push_back(triangle(x+25,610-h-56,42,610-h+74,{31,76,45,250}));
         }
     } else if (k=="street") {
+        // Concrete street canyon with close façades, storefront strips and overhead gantry.
         for (int side=0; side<2; ++side) {
-            int start = side==0 ? 0 : 785;
+            int start = side==0 ? 0 : 770;
             for (int i=0;i<4;++i) {
-                int x=start+i*74, h=170+(i%3)*72;
-                out.push_back(rect(x,610-h,x+64,620,{58,62,70,255}));
+                int x=start+i*78, h=190+(i%3)*74;
+                out.push_back(rect(x,610-h,x+68,620,{57,61,68,255}));
+                out.push_back(rect(x+7,610-h+28,x+61,610-h+40,{96,105,114,210}));
+                for (int yy=610-h+58; yy<585; yy+=36) {
+                    out.push_back(rect(x+12,yy,x+22,yy+10,{226,213,157,120}));
+                    out.push_back(rect(x+42,yy,x+52,yy+10,{170,198,220,110}));
+                }
             }
         }
+        out.push_back(rect(365,470,715,486,{83,88,94,225}));
+        out.push_back(rect(383,486,397,610,{67,72,78,230}));
+        out.push_back(rect(683,486,697,610,{67,72,78,230}));
     } else if (k=="tunnel") {
-        out.push_back({{13,16,21,255},{{0,0},{1080,0},{905,560},{175,560}}});
-        out.push_back(rect(0,535,165,1000,{27,30,35,255}));
-        out.push_back(rect(915,535,1080,1000,{27,30,35,255}));
+        // Fully enclosed tunnel with structural ribs and ceiling light rhythm.
+        out.push_back({{12,15,20,255},{{0,0},{1080,0},{900,560},{180,560}}});
+        out.push_back(rect(0,530,168,1050,{27,30,35,255}));
+        out.push_back(rect(912,530,1080,1050,{27,30,35,255}));
+        for (int x=170; x<=910; x+=118) {
+            out.push_back(rect(x,118,x+12,548,{45,48,52,170}));
+        }
+        for (int x=220; x<=860; x+=135) {
+            out.push_back(rect(x,250,x+72,264,{242,225,168,205}));
+        }
+        out.push_back(rect(0,548,1080,566,{69,72,75,180}));
     } else if (k=="alpine") {
-        out.push_back(peaks(W,720,245,430,7,{123,150,165,255},rng));
-        out.push_back(peaks(W,760,390,545,7,{239,246,249,248},rng));
+        // Alpine is the huge high-altitude world: broad white mass with blue-shadowed depth.
+        out.push_back(ridge(W,700,190,370,5,{108,139,156,235},rng));
+        out.push_back(ridge(W,755,315,490,5,{229,239,243,250},rng));
+        out.push_back({{244,248,249,240},{{90,620},{185,420},{280,620}}});
+        out.push_back({{238,245,247,240},{{760,620},{875,360},{990,620}}});
+        out.push_back(rolling(W,650,12,2.6,0.9,{214,226,229,235}));
     }
     return out;
 }
