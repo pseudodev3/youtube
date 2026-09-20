@@ -56,14 +56,11 @@ jobs:
         run: |
           g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
           chmod +x cpp/map_engine
-          ./cpp/map_engine training 120001 4 24 > /tmp/training.txt
-          ./cpp/map_engine country 120001 4 24 > /tmp/country.txt
-          ./cpp/map_engine mountain 120001 4 24 > /tmp/mountain.txt
-          ./cpp/map_engine canyon 120001 4 24 > /tmp/canyon.txt
-          grep -q '^S|' /tmp/training.txt
-          grep -q '^P|' /tmp/country.txt
-          grep -q '^P|' /tmp/mountain.txt
-          grep -q '^P|' /tmp/canyon.txt
+          for track in training country mountain canyon night_city coast forest desert; do
+            ./cpp/map_engine "$track" 120001 4 24 > "/tmp/$track.txt"
+            grep -q '^S|' "/tmp/$track.txt"
+            grep -q '^P|' "/tmp/$track.txt"
+          done
 
       - name: Verify preview cannot upload
         run: |
