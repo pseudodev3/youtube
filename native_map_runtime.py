@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import subprocess
 from pathlib import Path
@@ -150,6 +151,48 @@ def _pine(d: ImageDraw.ImageDraw, x: float, y: float, s: float, snowy: bool = Fa
             d.line([(x-width*.68*s,cy+5*s),(x+width*.68*s,cy+5*s)], fill=(239,246,249,225), width=max(2,int(4*s)))
 
 
+_OBJECT_HALF_WIDTH = {
+    "tree": 38, "tree_dark": 40, "pine": 38, "pine_snow": 40,
+    "fence": 36, "hedge": 44, "utility_pole": 28, "signboard": 38,
+    "rock": 32, "cactus": 28, "barrier": 42, "guardrail": 42,
+    "bollard": 8, "lamp": 30, "tunnel_light": 30, "warning": 28,
+    "snowbank": 42, "palm": 44, "neon": 31,
+}
+
+
+def _road_safe_x(frame, obj: dict[str, Any]) -> float:
+    """Place a native roadside prop outside the live curved road + shoulder."""
+    if frame is None:
+        return float(obj["x"])
+
+    side = -1.0 if float(obj["x"]) < W / 2 else 1.0
+    y = float(obj["y"])
+    horizon = 600.0 + float(getattr(frame, "shake", 0.0)) * 1.2
+    depth = max(0.0, min(1.0, (y - horizon) / max(1.0, H - horizon)))
+    p = depth ** (1.0 / 1.72)
+
+    road_curve = float(getattr(frame, "road_curve", 0.0))
+    road_curve_far = float(getattr(frame, "road_curve_far", 0.0))
+    t = float(getattr(frame, "t", 0.0))
+    heading = float(getattr(getattr(frame, "player", None), "heading", 0.0))
+    center = (
+        W / 2
+        + road_curve * (p ** 1.62) * 700
+        + road_curve_far * math.sin(p * math.pi) * 300
+        + math.sin(t * 0.14 + p * 3.0) * 50 * p
+        + heading * 18
+    )
+    width_mul = float(getattr(frame, "road_width", 0.82)) / 0.82
+    half_road = (65 + (p ** 1.28) * 980) * width_mul
+    shoulder = 28 + p * 30
+
+    scale = float(obj.get("scale", 1.0))
+    radius = _OBJECT_HALF_WIDTH.get(str(obj.get("kind")), 30) * scale
+    safety = 18 + 22 * p
+    jitter = (int(obj.get("variant", 0)) % 3) * 8 * scale
+    return center + side * (half_road + shoulder + radius + safety + jitter)
+
+
 def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
     kind = obj["kind"]
     x, y, s = obj["x"], obj["y"], obj["scale"]
@@ -236,7 +279,13 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
         d.ellipse([x-7*s,y-7*s,x+7*s,y+7*s],fill=(235,215,130,210))
 
 
-def draw_roadside(img: Image.Image, track: str, episode: int, frame_no: int) -> bool:
+def draw_roadside(
+    img: Image.Image,
+    track: str,
+    episode: int,
+    frame_no: int,
+    frame=None,
+) -> bool:
     scene = _scene(track, episode)
     if scene is None:
         return False
@@ -246,7 +295,12 @@ def draw_roadside(img: Image.Image, track: str, episode: int, frame_no: int) -> 
     layer = Image.new("RGBA", (W, H), (0,0,0,0))
     d = ImageDraw.Draw(layer, "RGBA")
     # Farther objects first, nearer objects last, which gives natural depth.
-    for obj in sorted(objects, key=lambda x: x["y"]):
+    for original in sorted(objects, key=lambda x: x["y"]):
+        obj = dict(original)
+        obj["x"] = _road_safe_x(frame, obj)
+        s = float(obj.get("scale", 1.0))
+        if obj["x"] < -140 * s or obj["x"] > W + 140 * s:
+            continue
         _draw_object(d, obj)
     img.paste(layer, (0,0), layer)
     return True
