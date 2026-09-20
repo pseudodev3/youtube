@@ -70,6 +70,52 @@ jobs:
           print("YouTube upload path is hard-disabled for this dry run.")
           PY
 
+      - name: Smoke test Audio V2 across all 15 maps
+        run: |
+          python - <<'PY'
+          import tempfile
+          import wave
+          from pathlib import Path
+          from audio import synthesize_audio
+
+          tracks = [
+              "training", "country", "mountain", "night_city", "rain",
+              "coast", "snow", "canyon", "desert", "forest",
+              "street", "tunnel", "neon_rain", "alpine", "extreme_canyon",
+          ]
+          fps = 30
+          frames = 18
+          speeds = [0.54 + i * 0.012 for i in range(frames)]
+          crashes = [False] * frames
+          impacts = [0.0] * frames
+          sides = [0.0] * frames
+          events = [None] * frames
+          events[10] = "CLEAN PASS!"
+          states = ["build"] * 6 + ["battle"] * 8 + ["finale"] * 4
+          slips = [0.0] * 7 + [0.006] * 6 + [0.0] * 5
+          angles = [0.0] * 7 + [0.38] * 6 + [0.0] * 5
+          loads = [0.25] * 6 + [-0.45] * 4 + [0.18] * 8
+
+          with tempfile.TemporaryDirectory() as td:
+              root = Path(td)
+              for track in tracks:
+                  path = root / f"{track}.wav"
+                  synthesize_audio(
+                      path, speeds, crashes, impacts, sides, events, states, fps,
+                      sample_rate=8000,
+                      seed=130013,
+                      drift_slips=slips,
+                      drift_angles=angles,
+                      longitudinal_loads=loads,
+                      track_key=track,
+                      story_type="clean_duel",
+                  )
+                  with wave.open(str(path), "rb") as wf:
+                      assert wf.getnchannels() == 2
+                      assert wf.getnframes() > 3000
+              print("Audio V2 matrix passed for all 15 maps.")
+          PY
+
       - name: Run full production stack
         env:
           GITHUB_EVENT_NAME: production_dry_run
