@@ -3,7 +3,13 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 # These must be set before importing main.py because its render constants are
 # resolved at import time.
@@ -57,11 +63,13 @@ def main() -> None:
 
         # Grab a representative frame from the same full renderer for quick visual review.
         still = OUT / f"{key}.jpg"
-        os.system(
-            "ffmpeg -y -v error -ss 4 -i "
-            + repr(str(destination))
-            + " -frames:v 1 -q:v 2 "
-            + repr(str(still))
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-v", "error",
+                "-ss", "4", "-i", str(destination),
+                "-frames:v", "1", "-q:v", "2", str(still),
+            ],
+            check=True,
         )
 
         manifest.append({
