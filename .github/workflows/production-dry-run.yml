@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - map-rebuild
+      - main
     paths:
       - ".github/workflows/production-dry-run.yml"
       - ".github/production-dry-run-now"
@@ -30,7 +30,7 @@ jobs:
       YOUTUBE_PRIVACY_STATUS: "private"
 
     steps:
-      - name: Checkout map rebuild
+      - name: Checkout production code
         uses: actions/checkout@v4
 
       - name: Snapshot isolated career
@@ -120,7 +120,10 @@ jobs:
         run: |
           python - <<'PY'
           import random
-          from captioning import CaptionDirector, caption_hash, runtime_candidates
+          from captioning import (
+              CaptionDirector, PASS_BANK, CRASH_BANK,
+              caption_hash, normalize_caption, runtime_candidates,
+          )
           from story_beats import STORY_TEMPLATES, build_story
 
           used = set()
@@ -158,6 +161,26 @@ jobs:
                   used.add(h)
 
           print(f"Caption endurance passed: {len(used)} unique lines across 300 simulated episodes.")
+
+          # Force the authored pools to be exhausted and prove the deep fallback
+          # still describes the same thing rather than switching to generic copy.
+          pass_used = {caption_hash(x) for x in PASS_BANK}
+          pass_director = CaptionDirector(44001, 440, pass_used)
+          pass_line = pass_director.fresh(PASS_BANK, category="runtime:pass")
+          assert any(normalize_caption(anchor) in pass_line for anchor in PASS_BANK), pass_line
+
+          crash_used = {caption_hash(x) for x in CRASH_BANK}
+          crash_director = CaptionDirector(44002, 441, crash_used)
+          crash_line = crash_director.fresh(CRASH_BANK, category="runtime:crash")
+          assert any(normalize_caption(anchor) in crash_line for anchor in CRASH_BANK), crash_line
+
+          result_pool = runtime_candidates("TARGET CLEARED! P4 🔥")
+          result_used = {caption_hash(x) for x in result_pool}
+          result_director = CaptionDirector(44003, 442, result_used)
+          result_line = result_director.fresh(result_pool, category="runtime:result")
+          assert "P4" in result_line, result_line
+
+          print("Semantic deep-fallback caption checks passed.")
           PY
 
       - name: Run full production stack
