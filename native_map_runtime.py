@@ -166,6 +166,8 @@ _OBJECT_HALF_WIDTH = {
     "bollard": 8, "lamp": 30, "tunnel_light": 30, "warning": 28,
     "snowbank": 42, "palm": 44, "neon": 31,
     "floodlight": 34, "haybale": 34, "scrub": 30,
+    "streetlight": 38, "reflector": 9, "snowpole": 10,
+    "city_sign": 38, "vent": 34,
 }
 
 
@@ -269,6 +271,39 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
             d.ellipse([lx-8*s,y-86*s,lx+8*s,y-72*s],fill=(255,218,126,215))
         else:
             d.rounded_rectangle([x-24*s,y-88*s,x+24*s,y-78*s],radius=max(2,int(3*s)),fill=(246,226,168,220))
+    elif kind == "streetlight":
+        pole=(37,42,48,245)
+        inward = 1 if x < W/2 else -1
+        lx=x+inward*30*s
+        ly=y-104*s
+        # Warm halo first, then the actual fixture so the light reads at phone size.
+        d.ellipse([lx-30*s,ly-25*s,lx+30*s,ly+25*s],fill=(255,209,116,42))
+        d.ellipse([lx-17*s,ly-14*s,lx+17*s,ly+14*s],fill=(255,220,139,68))
+        d.rectangle([x-3*s,y-101*s,x+3*s,y],fill=pole)
+        d.line([(x,y-98*s),(lx,ly)],fill=pole,width=max(2,int(4*s)))
+        d.rounded_rectangle([lx-10*s,ly-5*s,lx+10*s,ly+5*s],radius=max(1,int(2*s)),fill=(255,226,153,238))
+        d.ellipse([lx-42*s,y-5*s,lx+42*s,y+12*s],fill=(255,205,112,20))
+    elif kind == "reflector":
+        d.rectangle([x-3*s,y-42*s,x+3*s,y],fill=(212,216,211,238))
+        d.rectangle([x-5*s,y-35*s,x+5*s,y-27*s],fill=(245,244,222,235))
+        d.ellipse([x-8*s,y-39*s,x+8*s,y-23*s],fill=(210,235,255,36))
+    elif kind == "snowpole":
+        d.rectangle([x-3*s,y-75*s,x+3*s,y],fill=(225,230,230,245))
+        d.rectangle([x-4*s,y-68*s,x+4*s,y-54*s],fill=(219,63,56,235))
+        d.rectangle([x-4*s,y-42*s,x+4*s,y-28*s],fill=(219,63,56,235))
+    elif kind == "city_sign":
+        pole=(52,57,63,240)
+        panel=(48,59+v*5,70+v*3,242)
+        d.rectangle([x-3*s,y-72*s,x+3*s,y],fill=pole)
+        d.rounded_rectangle([x-36*s,y-102*s,x+36*s,y-69*s],radius=max(2,int(5*s)),fill=panel)
+        d.rectangle([x-27*s,y-94*s,x+23*s,y-88*s],fill=(221,224,217,210))
+        d.rectangle([x-27*s,y-82*s,x+10*s,y-77*s],fill=(157,196,219,180))
+    elif kind == "vent":
+        metal=(66,69,73,238)
+        d.rounded_rectangle([x-30*s,y-52*s,x+30*s,y+3*s],radius=max(2,int(5*s)),fill=metal)
+        for yy in range(4):
+            y0=y-(42-yy*10)*s
+            d.line([(x-22*s,y0),(x+22*s,y0)],fill=(31,34,38,220),width=max(1,int(2*s)))
     elif kind == "warning":
         d.rectangle([x-3*s,y-58*s,x+3*s,y],fill=(60,54,46,240))
         d.polygon([(x,y-82*s),(x-24*s,y-47*s),(x+24*s,y-47*s)],fill=(255,207,57,240))
