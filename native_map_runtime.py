@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import random
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,98 @@ def has_scene(track: str, episode: int) -> bool:
     return _scene(track, episode) is not None
 
 
+def _draw_sky_details(draw: ImageDraw.ImageDraw, track: str, episode: int) -> None:
+    rng = random.Random(episode * 7919 + sum(ord(ch) for ch in track) * 131)
+
+    def cloud(cx: int, cy: int, scale: float, color: tuple[int, int, int, int]) -> None:
+        w = int(150 * scale)
+        h = int(38 * scale)
+        draw.ellipse([cx-w, cy-h, cx+w, cy+h], fill=color)
+        draw.ellipse([cx-int(w*.55), cy-int(h*1.55), cx+int(w*.18), cy+int(h*.70)], fill=color)
+        draw.ellipse([cx-int(w*.10), cy-int(h*1.25), cx+int(w*.72), cy+int(h*.75)], fill=color)
+
+    if track == "training":
+        draw.ellipse([820, 108, 900, 188], fill=(255, 239, 181, 145))
+        draw.line([(120, 220), (410, 190)], fill=(238, 246, 249, 42), width=5)
+    elif track == "country":
+        draw.ellipse([815, 125, 910, 220], fill=(255, 224, 143, 185))
+        cloud(230 + rng.randrange(-35, 36), 205, .72, (245, 242, 221, 70))
+        cloud(630 + rng.randrange(-40, 41), 255, .55, (245, 242, 221, 50))
+    elif track == "mountain":
+        cloud(210, 195, .82, (225, 234, 238, 58))
+        cloud(790, 235, .62, (218, 229, 234, 44))
+        draw.rectangle([0, 360, W, 500], fill=(193, 208, 216, 18))
+    elif track == "night_city":
+        draw.ellipse([825, 98, 895, 168], fill=(232, 238, 226, 180))
+        for _ in range(18):
+            x=rng.randrange(35, W-35); y=rng.randrange(70, 390)
+            r=1 if rng.random()<.8 else 2
+            draw.ellipse([x-r,y-r,x+r,y+r], fill=(220, 230, 245, rng.randrange(70,145)))
+        draw.rectangle([0, 385, W, 555], fill=(71, 77, 109, 25))
+    elif track == "rain":
+        for cx,cy,s in ((180,150,.85),(470,125,.95),(790,165,.9),(1010,135,.72)):
+            cloud(cx, cy, s, (63, 75, 83, 150))
+        draw.rectangle([0, 300, W, 520], fill=(83, 98, 108, 35))
+    elif track == "coast":
+        draw.ellipse([820, 92, 925, 197], fill=(255, 228, 136, 205))
+        draw.rectangle([0, 420, W, 510], fill=(210, 237, 244, 28))
+        draw.rectangle([350, 500, 760, 506], fill=(240, 250, 250, 70))
+    elif track == "snow":
+        cloud(250, 190, .78, (246, 250, 251, 78))
+        cloud(770, 235, .66, (241, 247, 249, 60))
+        draw.ellipse([820, 115, 895, 190], fill=(244, 248, 247, 120))
+    elif track == "canyon":
+        draw.ellipse([830, 100, 930, 200], fill=(255, 205, 118, 175))
+        draw.rectangle([0, 400, W, 535], fill=(225, 145, 91, 28))
+    elif track == "desert":
+        draw.ellipse([790, 90, 930, 230], fill=(255, 214, 105, 220))
+        draw.rectangle([0, 410, W, 545], fill=(243, 183, 107, 34))
+        for y in (470, 492, 514):
+            draw.line([(90,y),(990,y)], fill=(255, 224, 162, 24), width=3)
+    elif track == "forest":
+        cloud(420, 210, .70, (196, 215, 207, 34))
+        draw.rectangle([0, 370, W, 550], fill=(157, 183, 169, 25))
+    elif track == "street":
+        draw.rectangle([0, 310, W, 515], fill=(142, 151, 161, 25))
+        cloud(215, 190, .62, (198, 205, 211, 36))
+        cloud(835, 220, .54, (195, 201, 209, 28))
+    elif track == "tunnel":
+        draw.ellipse([420, 260, 660, 430], fill=(235, 211, 145, 22))
+    elif track == "neon_rain":
+        draw.rectangle([0, 305, W, 545], fill=(81, 48, 116, 30))
+        draw.ellipse([110, 235, 420, 500], fill=(31, 208, 245, 16))
+        draw.ellipse([650, 210, 1030, 520], fill=(255, 55, 200, 15))
+    elif track == "alpine":
+        draw.ellipse([790, 78, 900, 188], fill=(252, 249, 220, 185))
+        draw.ellipse([750, 45, 940, 235], fill=(236, 246, 249, 32))
+        cloud(250, 215, .55, (246, 250, 251, 45))
+    elif track == "extreme_canyon":
+        draw.ellipse([820, 98, 920, 198], fill=(245, 168, 91, 160))
+        draw.rectangle([0, 345, W, 555], fill=(176, 78, 62, 38))
+
+
+def _draw_distance_haze(draw: ImageDraw.ImageDraw, track: str) -> None:
+    haze = {
+        "training": (221, 231, 232, 12),
+        "country": (244, 218, 160, 25),
+        "mountain": (190, 205, 211, 30),
+        "night_city": (72, 83, 113, 20),
+        "rain": (145, 160, 166, 38),
+        "coast": (203, 232, 238, 24),
+        "snow": (229, 239, 243, 33),
+        "canyon": (236, 165, 111, 26),
+        "desert": (246, 190, 116, 31),
+        "forest": (154, 177, 163, 24),
+        "street": (151, 157, 164, 20),
+        "tunnel": (176, 159, 119, 10),
+        "neon_rain": (104, 66, 139, 29),
+        "alpine": (207, 225, 234, 34),
+        "extreme_canyon": (218, 120, 91, 38),
+    }.get(track)
+    if haze:
+        draw.rectangle([0, 455, W, 690], fill=haze)
+
+
 def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
     scene = _scene(track, episode)
     if scene is None:
@@ -116,29 +209,14 @@ def draw_horizon(draw: ImageDraw.ImageDraw, track: str, episode: int) -> bool:
         t = y / 620.0
         c = tuple(int(top[i] * (1.0 - t) + bottom[i] * t) for i in range(3))
         draw.rectangle([0, y, W, y + 10], fill=c + (255,))
+
+    _draw_sky_details(draw, track, episode)
+
     for color, pts in scene["terrain"]:
         draw.polygon(pts, fill=color)
 
-    # Lightweight atmospheric perspective: distinct per biome, behind the race.
-    if track == "country":
-        draw.rectangle([0, 525, W, 650], fill=(244, 218, 160, 24))
-    elif track == "mountain":
-        draw.rectangle([0, 500, W, 675], fill=(190, 205, 211, 28))
-    elif track == "rain":
-        draw.rectangle([0, 450, W, 690], fill=(145, 160, 166, 34))
-    elif track == "snow":
-        draw.rectangle([0, 470, W, 700], fill=(229, 239, 243, 30))
-    elif track == "street":
-        draw.rectangle([0, 440, W, 650], fill=(151, 157, 164, 18))
-    elif track == "night_city":
-        draw.rectangle([0, 455, W, 665], fill=(72, 83, 113, 18))
-    elif track == "neon_rain":
-        draw.rectangle([0, 430, W, 675], fill=(104, 66, 139, 26))
-    elif track == "alpine":
-        draw.rectangle([0, 445, W, 705], fill=(207, 225, 234, 30))
-    elif track in {"canyon", "extreme_canyon"}:
-        alpha = 34 if track == "extreme_canyon" else 24
-        draw.rectangle([0, 510, W, 690], fill=(236, 165, 111, alpha))
+    # Atmosphere sits behind the road/cars but in front of distant terrain.
+    _draw_distance_haze(draw, track)
     return True
 
 
