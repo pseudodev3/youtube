@@ -1,0 +1,120 @@
+name: GRIDLOOP production dry run
+
+on:
+  push:
+    branches:
+      - map-rebuild
+    paths:
+      - ".github/workflows/production-dry-run.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gridloop-production-dry-run
+  cancel-in-progress: true
+
+jobs:
+  production-dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      FPS: "30"
+      DURATION: "24"
+      MAX_RENDER_ATTEMPTS: "3"
+      GRIDLOOP_OUTPUT_DIR: "output/production-dry-run"
+      CAREER_PATH: "/tmp/gridloop-dry-run-career.json"
+      YOUTUBE_UPLOAD_ENABLED: "false"
+      YOUTUBE_PRIVACY_STATUS: "private"
+
+    steps:
+      - name: Checkout map rebuild
+        uses: actions/checkout@v4
+
+      - name: Snapshot isolated career
+        run: |
+          cp career_state.json "$CAREER_PATH"
+          sha256sum career_state.json > /tmp/career-before.sha256
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install production dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg fonts-dejavu-core g++
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build production C++ map engine
+        run: |
+          g++ -O3 -std=c++17 -Wall -Wextra cpp/map_engine.cpp -o cpp/map_engine
+          chmod +x cpp/map_engine
+          ./cpp/map_engine mountain 130013 6 30 > /tmp/native-smoke.txt
+          grep -q '^S|' /tmp/native-smoke.txt
+          grep -q '^P|' /tmp/native-smoke.txt
+          grep -q '^O|' /tmp/native-smoke.txt
+
+      - name: Prove uploads are disabled
+        run: |
+          python - <<'PY'
+          import os
+          from youtube_upload import upload_enabled
+          assert os.environ["YOUTUBE_UPLOAD_ENABLED"] == "false"
+          assert upload_enabled() is False
+          print("YouTube upload path is hard-disabled for this dry run.")
+          PY
+
+      - name: Run full production stack
+        env:
+          GITHUB_EVENT_NAME: production_dry_run
+        run: python main.py
+
+      - name: Validate production result
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          out = Path("output/production-dry-run")
+          status = json.loads((out / "run_status.json").read_text())
+          qc = json.loads((out / "qc.json").read_text())
+          telemetry = json.loads((out / "telemetry.json").read_text())
+          metadata = json.loads((out / "metadata.json").read_text())
+
+          assert status["status"] == "preview", status
+          assert qc["passed"] is True, qc
+          assert qc["score"] >= 72, qc
+          assert qc["probes"]["width"] == 1080
+          assert qc["probes"]["height"] == 1920
+          assert qc["probes"]["has_audio"] is True
+          assert 23.8 <= float(qc["probes"]["duration"]) <= 24.3
+          assert telemetry["starting_cars"] == 8
+          assert telemetry["event_count"] >= 3
+          assert telemetry["has_final_result"] is True
+          assert metadata["privacy_status"] == "public" or metadata["privacy_status"] == "private"
+          assert list(out.glob("episode_*.mp4")), "final MP4 missing"
+
+          print("FULL PRODUCTION DRY RUN PASSED")
+          print("QC:", qc["score"], qc["issues"])
+          print("Track:", metadata["track"])
+          print("Title:", metadata["title"])
+          print("Final position:", telemetry["final_position"])
+          print("Events:", telemetry["event_count"])
+          PY
+
+      - name: Verify repository career was untouched
+        run: |
+          sha256sum -c /tmp/career-before.sha256
+          git diff --exit-code -- career_state.json
+
+      - name: Upload full production artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gridloop-production-dry-run
+          path: output/production-dry-run/
+          if-no-files-found: error
+          retention-days: 7
