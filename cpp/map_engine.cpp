@@ -164,9 +164,16 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
             int w = 58 + int((rng()%38));
             int h = hh(rng);
             out.push_back(rect(x,610-h,x+w,615,body));
+            // Window rhythm keeps the skyline readable at Shorts resolution.
+            Color warm = k=="neon_rain" ? Color{128,88,189,170} : Color{245,204,104,165};
+            Color cool = k=="neon_rain" ? Color{45,224,255,150} : Color{91,164,224,135};
+            for (int yy=610-h+24; yy<590; yy+=34) {
+                out.push_back(rect(x+10,yy,std::min(x+w-10,x+18),yy+8,((yy/34+i)%2)?warm:cool));
+                if (w>72) out.push_back(rect(x+w-24,yy,std::min(x+w-10,x+w-16),yy+8,((yy/34+i)%2)?cool:warm));
+            }
             if (k=="neon_rain") {
                 Color glow = (i%2) ? Color{45,224,255,220} : Color{255,58,207,220};
-                out.push_back(rect(x+8,610-h+26,std::min(x+w-8,x+48),610-h+34,glow));
+                out.push_back(rect(x+8,610-h+13,std::min(x+w-8,x+50),610-h+21,glow));
             }
             x += w + 20 + int(rng()%25); ++i;
         }
@@ -177,8 +184,12 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
         }
     } else if (k=="coast") {
         out.push_back(rect(0,548,1080,760,{40,141,191,255}));
+        out.push_back(rect(0,586,1080,592,{201,236,244,92}));
+        out.push_back(rect(0,632,1080,637,{201,236,244,66}));
         out.push_back({{102,104,92,255},{{0,640},{150,548},{255,660},{170,820},{0,860}}});
         out.push_back({{94,99,88,255},{{1080,640},{930,548},{820,665},{910,825},{1080,865}}});
+        // Far headland makes the horizon feel coastal rather than just blue.
+        out.push_back({{85,108,101,190},{{520,570},{610,530},{700,548},{790,570},{790,610},{520,610}}});
         out.push_back({{255,219,111,240},{{850,250},{900,225},{950,250},{960,300},{925,340},{875,340},{840,300}}});
     } else if (k=="snow") {
         out.push_back(peaks(W,700,360,500,7,{196,212,222,255},rng));
@@ -201,13 +212,20 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
     } else if (k=="desert") {
         out.push_back(rolling(W,650,34,2.0,0.1,{208,159,89,255}));
         out.push_back(rolling(W,708,42,1.65,1.3,{231,184,106,250}));
+        out.push_back({{156,104,66,195},{{95,620},{135,540},{185,510},{280,510},{330,555},{360,620}}});
+        out.push_back({{145,95,63,185},{{610,625},{650,555},{700,530},{790,530},{830,565},{860,625}}});
         out.push_back({{255,221,104,240},{{828,245},{875,220},{925,238},{952,284},{938,333},{888,352},{840,330},{814,285}}});
     } else if (k=="forest") {
+        // Two-depth canopy: misty far pines, then dark close trunks.
+        for (int x=-20; x<1120; x+=70) {
+            int h = 95 + int(rng()%55);
+            out.push_back(triangle(x+30,585-h-70,40,615,{53,93,67,175}));
+        }
         for (int x=-35; x<1120; x+=54) {
             int h = 140 + int(rng()%95);
             out.push_back(rect(x+20,610-h,x+30,620,{49,40,32,250}));
-            out.push_back(triangle(x+25,610-h-100,48,610-h+45,{27,67,42,255}));
-            out.push_back(triangle(x+25,610-h-56,42,610-h+74,{34,82,48,250}));
+            out.push_back(triangle(x+25,610-h-100,48,610-h+45,{24,61,39,255}));
+            out.push_back(triangle(x+25,610-h-56,42,610-h+74,{31,76,45,250}));
         }
     } else if (k=="street") {
         for (int side=0; side<2; ++side) {
