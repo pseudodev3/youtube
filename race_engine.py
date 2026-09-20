@@ -68,6 +68,7 @@ class RaceFrame:
     track_name: str
     track_theme: str
     hook_text: str
+    player_longitudinal_g: float = 0.0
 
 
 class RaceEngine:
@@ -662,6 +663,9 @@ class RaceEngine:
         return event
 
     def frame(self, i: int) -> RaceFrame:
+        # Capture speed only for render/audio telemetry. It never feeds back into
+        # the simulation, so this cannot alter race decisions or contact physics.
+        player_speed_before = float(self.player.speed)
         t = i / self.fps
         curve = self._curve(t)
         curve_far = self._curve_far(t)
@@ -1004,4 +1008,8 @@ class RaceEngine:
             track_name=str(self.track.get("name", "Circuit")),
             track_theme=str(self.track.get("theme", "country")),
             hook_text=self.hook_text,
+            player_longitudinal_g=max(
+                -1.0,
+                min(1.0, (float(self.player.speed) - player_speed_before) * self.fps * 1.8),
+            ),
         )
