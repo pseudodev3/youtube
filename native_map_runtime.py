@@ -167,6 +167,30 @@ def _draw_object(d: ImageDraw.ImageDraw, obj: dict[str, Any]) -> None:
         d.rounded_rectangle([x-2.3*s,y-42*s,x+2.3*s,y+3*s],radius=max(1,int(1.5*s)),fill=wood)
         d.line([(x-34*s,y-29*s),(x+34*s,y-29*s)],fill=(116,80,45,220),width=max(2,int(2.2*s)))
         d.line([(x-34*s,y-14*s),(x+34*s,y-14*s)],fill=(142,99,56,205),width=max(2,int(1.8*s)))
+    elif kind == "hedge":
+        # Low, dense rural hedge. Keep it visually separate from full trees.
+        dark = (67,91+v*2,45,238)
+        light = (92,113+v*2,54,220)
+        d.rounded_rectangle([x-42*s,y-34*s,x+42*s,y+4*s],radius=max(3,int(10*s)),fill=dark)
+        d.ellipse([x-35*s,y-48*s,x-1*s,y-12*s],fill=light)
+        d.ellipse([x-4*s,y-50*s,x+34*s,y-10*s],fill=light)
+    elif kind == "utility_pole":
+        wood = (82,61,43,245)
+        wire = (55,54,51,190)
+        d.rectangle([x-3.5*s,y-112*s,x+3.5*s,y],fill=wood)
+        d.line([(x-25*s,y-96*s),(x+25*s,y-96*s)],fill=wood,width=max(2,int(4*s)))
+        d.ellipse([x-19*s,y-101*s,x-13*s,y-95*s],fill=(218,214,190,220))
+        d.ellipse([x+13*s,y-101*s,x+19*s,y-95*s],fill=(218,214,190,220))
+        side = 1 if x < W/2 else -1
+        d.line([(x+side*18*s,y-98*s),(x+side*62*s,y-88*s)],fill=wire,width=max(1,int(1.5*s)))
+    elif kind == "signboard":
+        post = (67,72,75,242)
+        panel = (226,229,225,242)
+        accent = (206,61,52,235)
+        d.rectangle([x-3*s,y-64*s,x+3*s,y],fill=post)
+        d.rounded_rectangle([x-34*s,y-92*s,x+34*s,y-58*s],radius=max(2,int(4*s)),fill=panel)
+        d.rectangle([x-29*s,y-86*s,x+29*s,y-79*s],fill=accent)
+        d.rectangle([x-23*s,y-73*s,x+16*s,y-68*s],fill=(84,90,94,210))
     elif kind == "rock":
         shade=(99+v*7,88+v*5,76+v*3,238)
         d.polygon([(x-27*s,y),(x-18*s,y-28*s),(x+7*s,y-38*s),(x+30*s,y-9*s),(x+20*s,y+4*s)],fill=shade)
