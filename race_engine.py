@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import math
 import random
 
+from captioning import CaptionDirector, runtime_candidates
+
 
 @dataclass
 class CarState:
@@ -93,7 +95,15 @@ class RaceEngine:
         "showboat": "would rather look cool than win",
     }
 
-    def __init__(self, skill: float, seed: int, duration: float = 24.0, fps: int = 30, plan: dict | None = None):
+    def __init__(
+        self,
+        skill: float,
+        seed: int,
+        duration: float = 24.0,
+        fps: int = 30,
+        plan: dict | None = None,
+        used_caption_hashes=None,
+    ):
         self.skill = max(0.02, min(0.98, skill))
         self.seed = seed
         self.duration = duration
@@ -109,6 +119,22 @@ class RaceEngine:
         self.event_until = -999
         self.plan = plan or {}
         self.track = dict(self.plan.get("track", {}))
+        self.caption_director = CaptionDirector(
+            seed=seed ^ 0xC4A7,
+            episode=int(self.plan.get("episode", 1)),
+            used_hashes=used_caption_hashes,
+        )
+        self._caption_map: dict[str, str] = {}
+        self._planned_captions = {
+            str(beat.get("caption"))
+            for beat in self.plan.get("beats", [])
+            if beat.get("caption")
+        }
+        for planned_caption in self._planned_captions:
+            self.caption_director.reserve(planned_caption)
+        planned_hook = str(self.plan.get("hook", "")).strip()
+        if planned_hook:
+            self.caption_director.reserve(planned_hook)
 
         fallback_target = 5 if self.skill < .34 else 4 if self.skill < .58 else 3
         self.target_position = int(self.plan.get("target_position", fallback_target))
@@ -306,11 +332,22 @@ class RaceEngine:
 
     def _hold_event(self, text: str | None, i: int) -> str | None:
         if text:
-            major = any(word in text for word in ("PILEUP", "CRASH", "HUGE HIT", "FULL SPIN", "BIG CONTACT"))
+            raw = str(text)
+            if raw in self._planned_captions:
+                fresh = raw
+            else:
+                fresh = self._caption_map.get(raw)
+                if fresh is None:
+                    fresh = self.caption_director.fresh(
+                        runtime_candidates(raw),
+                        category=f"runtime:{raw}",
+                    )
+                    self._caption_map[raw] = fresh
+            major = any(word in fresh for word in ("PILEUP", "CRASH", "HUGE HIT", "FULL SPIN", "BIG CONTACT"))
             hold = 1.05 if major else 0.62
-            self.held_event = text
+            self.held_event = fresh
             self.event_until = i + int(self.fps * hold)
-            return text
+            return fresh
         if self.held_event and i <= self.event_until:
             return self.held_event
         return None
