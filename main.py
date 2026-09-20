@@ -94,6 +94,9 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
     impact_sides: list[float] = []
     event_texts: list[str | None] = []
     music_states: list[str] = []
+    drift_slips: list[float] = []
+    drift_angles: list[float] = []
+    longitudinal_loads: list[float] = []
 
     starting_cars = 0
     positions: list[int] = []
@@ -146,6 +149,9 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
             impact_sides.append(strongest_side)
             event_texts.append(rf.event_text)
             music_states.append(music_state_at(plan, rf.t))
+            drift_slips.append(float(rf.player.drift_slip))
+            drift_angles.append(float(rf.player.drift_angle))
+            longitudinal_loads.append(float(getattr(rf, "player_longitudinal_g", 0.0)))
 
             if featured and featured.active and 0.0 < featured.z < 1.18:
                 featured_visible_frames += 1
@@ -207,6 +213,11 @@ def render_video(career: dict, plan: dict) -> tuple[Path, dict]:
         music_states,
         FPS,
         seed=seed,
+        drift_slips=drift_slips,
+        drift_angles=drift_angles,
+        longitudinal_loads=longitudinal_loads,
+        track_key=str(plan.get("track", {}).get("key", "training")),
+        story_type=str(plan.get("story_type", "")),
     )
 
     mux = [
