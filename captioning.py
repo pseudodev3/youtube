@@ -14,6 +14,70 @@ def caption_hash(text: str) -> str:
     return hashlib.sha1(normalize_caption(text).encode("utf-8")).hexdigest()[:16]
 
 
+# Reserve the pre-CaptionDirector vocabulary too. Those episodes were rendered
+# before persistent caption hashes existed, so the Railway career volume cannot
+# tell us exactly which old stock lines appeared. Reserving the whole legacy set
+# is safer than letting any of them resurface.
+_LEGACY_RIVALS = ("BLUE", "GREEN", "ORANGE", "PURPLE", "WHITE", "CYAN", "LIME")
+_LEGACY_PATTERNS = (
+    "{rival} WOULD NOT LET RED THROUGH", "RED HAD ONE PROBLEM: {rival}",
+    "{rival} PARKED THE BUS AGAIN", "{rival} SHUTS THE DOOR",
+    "{rival} BRAKE CHECKS RED?!", "CHAOS BEHIND THEM",
+    "{rival} COMES BACK FOR MORE", "ONE LAST FIGHT",
+    "RED WANTED REVENGE ON {rival}", "{rival} REMEMBERED LAST RACE",
+    "THIS BEEF IS GETTING PERSONAL", "{rival} FIRES THE FIRST SHOT",
+    "NO ROOM FROM {rival}", "SOMEONE THROWS IT AWAY", "{rival} SENDS IT",
+    "FINAL-LAP DRAMA", "THE GRID TURNED INTO A PARKING LOT",
+    "RED HAD TO SURVIVE THIS ONE", "THIS RACE GOT STUPID FAST",
+    "IT STARTS GETTING MESSY", "{rival} SEES A GAP", "CAR SIDEWAYS!",
+    "THEY ARRIVE TOO FAST", "RED HAS TO PICK A GAP",
+    "RED HAD TO DO THIS THE HARD WAY", "FROM THE BACK OF THE GRID",
+    "THE COMEBACK STARTS NOW", "RED GETS HELD UP", "{rival} MAKES IT WORSE",
+    "A GAP OPENS", "RED CLOSES BACK IN", "ONE LAST POSITION",
+    "RED VS {rival}. NO EXCUSES.", "JUST RED AND {rival} THIS TIME",
+    "THE CLEANEST FIGHT ON THE GRID", "{rival} DEFENDS",
+    "RED LOOKS AROUND THE OUTSIDE", "STILL SIDE BY SIDE",
+    "{rival} ANSWERS BACK", "LAST CHANCE", "NOBODY ON THIS GRID CAN BE NORMAL",
+    "THIS RACE LOST THE PLOT", "24 SECONDS OF TERRIBLE DECISIONS",
+    "WHY WOULD YOU DO THAT?", "BRAKES!", "THERE GOES ONE",
+    "{rival} JOINS THE NONSENSE", "ABSOLUTE SCENES",
+    "RED AND {rival} FINALLY SETTLE IT", "THE {rival} SHOWDOWN",
+    "THIS RIVALRY ENDS ON TRACK", "{rival} STARTS DEFENDING EARLY",
+    "FIRST BIG MOVE", "TRAFFIC CHANGES EVERYTHING",
+    "THEY FIND EACH OTHER AGAIN", "THIS IS FOR THE RIVALRY",
+    "HUGE HIT! 💥", "FULL SPIN!", "THAT'S A CRASH!", "WHEEL TO WHEEL!",
+    "THEY TOUCH!", "NO ROOM!", "RUBBING WHEELS", "RED GETS ONE!",
+    "RED SNEAKS THROUGH!", "CLEAN PASS!", "RED CATCHES THE SLIDE!",
+    "COUNTERSTEER!", "HE SAVED IT!", "RED THREW IT AWAY!", "TOO MUCH!",
+    "NO GRIP!", "RED'S BACK!", "BIG CONTACT! 💥", "RED RUBS WHEELS!",
+    "NO SPACE!",
+)
+
+
+def _legacy_reserved_hashes() -> set[str]:
+    hashes: set[str] = set()
+    for pattern in _LEGACY_PATTERNS:
+        if "{rival}" in pattern:
+            for rival in _LEGACY_RIVALS:
+                hashes.add(caption_hash(pattern.format(rival=rival)))
+        else:
+            hashes.add(caption_hash(pattern))
+    for rival in _LEGACY_RIVALS:
+        hashes.add(caption_hash(f"{rival} GETS RED!"))
+        hashes.add(caption_hash(f"RED AND {rival} CRASH! 💥"))
+        hashes.add(caption_hash(f"RED AND {rival} MAKE CONTACT!"))
+        hashes.add(caption_hash(f"RED RUBS {rival}'S WHEEL"))
+    for position in range(1, 9):
+        hashes.add(caption_hash(f"TARGET CLEARED! P{position} 🔥"))
+    for missed in range(1, 8):
+        noun = "PLACE" if missed == 1 else "PLACES"
+        hashes.add(caption_hash(f"MISSED BY {missed} {noun}"))
+    return hashes
+
+
+LEGACY_RESERVED_HASHES = _legacy_reserved_hashes()
+
+
 HOOK_BANKS = {
     "rival_blockade": [
         "{rival} WOULD NOT LET RED THROUGH",
@@ -282,7 +346,8 @@ class CaptionDirector:
     ):
         self.seed = int(seed)
         self.episode = int(episode)
-        self.used_hashes = {str(x) for x in (used_hashes or [])}
+        self.used_hashes = set(LEGACY_RESERVED_HASHES)
+        self.used_hashes.update(str(x) for x in (used_hashes or []))
         self.local_texts: set[str] = set()
         self.counter = 0
 
