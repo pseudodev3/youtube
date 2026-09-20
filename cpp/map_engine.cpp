@@ -76,8 +76,9 @@ static Poly peaks(double width, double base, double min_top, double max_top, int
 struct Style { Color sky0, sky1, ground; };
 
 static Style style_for(const std::string& k) {
-    if (k=="country") return {{119,184,228},{212,231,213},{126,157,78}};
-    if (k=="mountain") return {{92,142,190},{189,205,216},{75,91,76}};
+    if (k=="training") return {{103,159,205},{199,213,220},{103,108,106}};
+    if (k=="country") return {{131,187,224},{224,218,181},{176,151,84}};
+    if (k=="mountain") return {{101,139,170},{185,195,199},{70,72,70}};
     if (k=="night_city") return {{12,18,43},{48,52,73},{29,34,43}};
     if (k=="rain") return {{49,66,86},{119,131,139},{53,73,65}};
     if (k=="coast") return {{74,170,228},{215,232,238},{54,139,164}};
@@ -98,19 +99,40 @@ static std::vector<Poly> terrain_for(const std::string& k, uint64_t seed, double
     std::vector<Poly> out;
 
     if (k=="training") {
-        out.push_back(rolling(W,585,28,3.0,0.3,{83,140,78,255}));
-        out.push_back(rect(35,500,225,603,{86,92,98,240}));
-        out.push_back(rect(855,500,1045,603,{86,92,98,240}));
+        // Purpose-built test facility: concrete apron, grandstands and timing tower.
+        out.push_back(rect(0,585,W,720,{117,121,120,255}));
+        out.push_back(rect(35,472,278,604,{69,76,82,250}));
+        out.push_back(rect(802,472,1045,604,{69,76,82,250}));
+        for (int y=500; y<=580; y+=20) {
+            out.push_back(rect(48,y,265,y+5,{201,204,201,205}));
+            out.push_back(rect(815,y,1032,y+5,{201,204,201,205}));
+        }
+        out.push_back(rect(456,430,624,604,{57,63,69,252}));
+        out.push_back(rect(484,458,596,520,{151,191,209,225}));
+        out.push_back(rect(438,420,642,438,{213,64,55,245}));
+        out.push_back(rect(0,601,205,620,{198,201,197,238}));
+        out.push_back(rect(875,601,1080,620,{198,201,197,238}));
     } else if (k=="country") {
-        out.push_back(rolling(W,602,42,3.2,0.2,{91,147,72,255}));
-        out.push_back(rolling(W,656,34,2.5,1.1,{137,173,83,255}));
-        out.push_back(rect(78,550,184,625,{148,72,48,250}));
-        out.push_back({{92,48,37,250},{{64,550},{131,507},{198,550}}});
-        out.push_back(rect(202,546,226,625,{190,196,178,245}));
-        out.push_back({{204,210,192,245},{{198,546},{214,528},{230,546}}});
+        // Patchwork farmland: dry crops, hedges and low rolling land rather than a green carpet.
+        out.push_back(rolling(W,612,26,2.8,0.3,{129,145,73,255}));
+        out.push_back(rolling(W,660,22,2.1,1.0,{194,164,83,255}));
+        out.push_back({{219,186,97,248},{{0,630},{260,604},{420,676},{180,720},{0,710}}});
+        out.push_back({{151,129,68,248},{{420,622},{690,590},{890,663},{650,718},{430,690}}});
+        out.push_back({{204,177,93,248},{{865,610},{1080,585},{1080,720},{910,700}}});
+        out.push_back(rect(78,548,190,624,{153,73,48,250}));
+        out.push_back({{91,49,38,250},{{62,548},{134,500},{206,548}}});
+        out.push_back(rect(216,544,240,624,{188,190,167,245}));
+        out.push_back({{203,205,181,245},{{210,544},{228,523},{246,544}}});
+        out.push_back(rect(742,565,836,624,{126,83,48,242}));
+        out.push_back({{91,58,40,242},{{728,565},{789,528},{850,565}}});
     } else if (k=="mountain") {
-        out.push_back(peaks(W,680,300,480,7,{61,73,80,255},rng));
-        out.push_back(peaks(W,720,420,565,8,{104,113,116,246},rng));
+        // Cold, high-altitude rock world with near cliff faces and snow traces.
+        out.push_back(peaks(W,692,220,410,6,{55,61,66,255},rng));
+        out.push_back(peaks(W,735,350,520,7,{94,99,102,248},rng));
+        out.push_back({{48,52,55,255},{{0,440},{150,385},{225,515},{182,690},{0,840}}});
+        out.push_back({{52,55,58,255},{{1080,420},{940,370},{855,500},{900,690},{1080,835}}});
+        out.push_back({{223,230,232,232},{{235,365},{285,275},{335,365},{300,342},{285,315},{270,345}}});
+        out.push_back({{231,236,237,226},{{718,342},{775,245},{830,355},{792,330},{774,290},{754,332}}});
     } else if (k=="night_city" || k=="neon_rain") {
         Color body = k=="neon_rain" ? Color{15,18,29,255} : Color{20,25,34,255};
         std::uniform_int_distribution<int> hh(120,300);
