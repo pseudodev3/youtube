@@ -229,8 +229,8 @@ static void emit_roadside(const std::string& k, uint64_t seed, int frames, doubl
             for (int side : {-1,1}) {
                 double x = side<0 ? 74.0 + (variant%3)*11.0 : 1080.0 - (74.0 + (variant%3)*11.0);
                 std::string kind = "marker";
-                if (k=="training") kind = (i%3==0 ? "barrier" : "bollard");
-                else if (k=="country") kind = (i%3==1 ? "tree" : "fence");
+                if (k=="training") kind = (i%4==0 ? "signboard" : (i%2==0 ? "barrier" : "bollard"));
+                else if (k=="country") kind = (i%5==0 ? "utility_pole" : (i%3==0 ? "hedge" : (i%2==0 ? "fence" : "tree")));
                 else if (k=="mountain") kind = (i%3==0 ? "pine" : (i%3==1 ? "rock" : "guardrail"));
                 else if (k=="night_city") kind = (i%2 ? "lamp" : "barrier");
                 else if (k=="rain") kind = (i%3==0 ? "tree" : "bollard");
