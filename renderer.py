@@ -483,43 +483,76 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
     d.rounded_rectangle([bx0,by0,bx0+(bx1-bx0)*frame.race_progress,by1],radius=4,fill=(255,213,90,215))
 
     if frame.event_text:
-        text=frame.event_text; box=d.textbbox((0,0),text,font=f1); tw=box[2]-box[0]
-        event_font=f1
+        # Race beats should read like broadcast captions, not modal UI.
+        text=frame.event_text
+        event_font=_font(48,True)
+        box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
+        if tw>880:
+            event_font=_font(39,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
         if tw>900:
-            event_font=_font(40,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
-        d.rounded_rectangle([W/2-tw/2-30,320,W/2+tw/2+30,414],radius=24,fill=(0,0,0,185),outline=(255,255,255,40),width=2)
-        d.text((W/2-tw/2,340),text,font=event_font,fill=(255,255,255,255))
+            event_font=_font(34,True); box=d.textbbox((0,0),text,font=event_font); tw=box[2]-box[0]
 
-    if frame.t<1.90:
-        # Intro hook behaves like a cinematic subtitle, not another UI card.
-        title=_font(56,True); sub=_font(29,True)
-        alpha=245 if frame.t<1.45 else int(max(0,245*(1.90-frame.t)/.45))
+        accent=(255,215,90,235)
+        upper=text.upper()
+        if any(word in upper for word in ("CRASH","PILEUP","HIT","SPIN","CONTACT")):
+            accent=(255,105,84,240)
+        elif "CLEARED" in upper:
+            accent=(118,231,155,240)
+
+        event_x=W/2-tw/2
+        event_y=338
+        d.text(
+            (event_x,event_y),
+            text,
+            font=event_font,
+            fill=(255,255,255,252),
+            stroke_width=4,
+            stroke_fill=(0,0,0,205),
+        )
+        line_w=max(72,min(170,int(tw*.24)))
+        d.rounded_rectangle(
+            [W/2-line_w/2,event_y+63,W/2+line_w/2,event_y+68],
+            radius=3,
+            fill=accent,
+        )
+
+    if frame.t<1.82:
+        # Cinematic intro subtitle: quick fade-in, readable hold, clean fade-out.
+        title=_font(54,True); sub=_font(27,True)
+        if frame.t<.16:
+            alpha=int(245*max(0.0,frame.t/.16))
+        elif frame.t<1.30:
+            alpha=245
+        else:
+            alpha=int(max(0,245*(1.82-frame.t)/.52))
+
         hook=getattr(frame,"hook_text",f"CAN RED REACH P{frame.target_position}?")
         hook_font=title
         bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 860:
-            hook_font=_font(46,True); bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 860:
-            hook_font=_font(38,True); bb=d.textbbox((0,0),hook,font=hook_font)
+        if bb[2]-bb[0] > 880:
+            hook_font=_font(45,True); bb=d.textbbox((0,0),hook,font=hook_font)
+        if bb[2]-bb[0] > 880:
+            hook_font=_font(37,True); bb=d.textbbox((0,0),hook,font=hook_font)
+
         hook_x=W/2-(bb[2]-bb[0])/2
         d.text(
-            (hook_x,1340),
+            (hook_x,1328),
             hook,
             font=hook_font,
             fill=(255,255,255,alpha),
-            stroke_width=5,
-            stroke_fill=(0,0,0,min(205,alpha)),
+            stroke_width=4,
+            stroke_fill=(0,0,0,min(190,alpha)),
         )
 
         rival=f"{getattr(frame,'track_name','CIRCUIT')} • WATCH {frame.featured_rival}"
         bb=d.textbbox((0,0),rival,font=sub)
         d.text(
-            (W/2-(bb[2]-bb[0])/2,1415),
+            (W/2-(bb[2]-bb[0])/2,1404),
             rival,
             font=sub,
             fill=(255,220,95,alpha),
-            stroke_width=3,
-            stroke_fill=(0,0,0,min(190,alpha)),
+            stroke_width=2,
+            stroke_fill=(0,0,0,min(175,alpha)),
         )
 
     if frame.race_progress>.945:
