@@ -490,23 +490,37 @@ def render_frame(frame,episode: int,skill: float,frame_no: int)->Image.Image:
         d.rounded_rectangle([W/2-tw/2-30,320,W/2+tw/2+30,414],radius=24,fill=(0,0,0,185),outline=(255,255,255,40),width=2)
         d.text((W/2-tw/2,340),text,font=event_font,fill=(255,255,255,255))
 
-    if frame.t<2.25:
-        title=_font(58,True); sub=_font(32,True)
-        alpha=230 if frame.t<1.8 else int(max(0,230*(2.25-frame.t)/.45))
-        d.rounded_rectangle([95,1260,W-95,1510],radius=36,fill=(5,8,12,alpha),outline=(255,215,90,min(220,alpha)),width=3)
+    if frame.t<1.90:
+        # Intro hook behaves like a cinematic subtitle, not another UI card.
+        title=_font(56,True); sub=_font(29,True)
+        alpha=245 if frame.t<1.45 else int(max(0,245*(1.90-frame.t)/.45))
         hook=getattr(frame,"hook_text",f"CAN RED REACH P{frame.target_position}?")
         hook_font=title
         bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 820:
+        if bb[2]-bb[0] > 860:
             hook_font=_font(46,True); bb=d.textbbox((0,0),hook,font=hook_font)
-        if bb[2]-bb[0] > 820:
+        if bb[2]-bb[0] > 860:
             hook_font=_font(38,True); bb=d.textbbox((0,0),hook,font=hook_font)
-        d.text((W/2-(bb[2]-bb[0])/2,1300),hook,font=hook_font,fill=(255,255,255,alpha))
+        hook_x=W/2-(bb[2]-bb[0])/2
+        d.text(
+            (hook_x,1340),
+            hook,
+            font=hook_font,
+            fill=(255,255,255,alpha),
+            stroke_width=5,
+            stroke_fill=(0,0,0,min(205,alpha)),
+        )
+
         rival=f"{getattr(frame,'track_name','CIRCUIT')} • WATCH {frame.featured_rival}"
-        bb=d.textbbox((0,0),rival,font=sub); d.text((W/2-(bb[2]-bb[0])/2,1390),rival,font=sub,fill=(255,220,95,alpha))
-        hint="something always happens around him..."
-        hintf=_font(27,False); bb=d.textbbox((0,0),hint,font=hintf)
-        d.text((W/2-(bb[2]-bb[0])/2,1440),hint,font=hintf,fill=(230,234,240,alpha))
+        bb=d.textbbox((0,0),rival,font=sub)
+        d.text(
+            (W/2-(bb[2]-bb[0])/2,1415),
+            rival,
+            font=sub,
+            fill=(255,220,95,alpha),
+            stroke_width=3,
+            stroke_fill=(0,0,0,min(190,alpha)),
+        )
 
     if frame.race_progress>.945:
         success=frame.position<=frame.target_position
